@@ -15,8 +15,6 @@
 #ifndef TDBCINT_H_INCLUDED
 #define TDBCINT_H_INCLUDED 1
 
-#include "tdbc.h"
-
 /*
  * Used to tag functions that are only to be visible within the module being
  * built and not outside it (where this is supported by the linker).
@@ -29,6 +27,8 @@
 #	define MODULE_SCOPE extern
 #   endif
 #endif
+
+#include "tdbc.h"
 
 /*
  * Linkage to procedures not exported from this module
