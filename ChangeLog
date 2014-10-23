@@ -1,3 +1,7 @@
+2014-10-23  Don Porter  <dgp@users.sourceforge.net>
+
+	* doc/*.[3n]: [Bug 00b792] OpenBSD friendly docs.
+
 2014-08-14  Don Porter  <dgp@users.sourceforge.net>
 
 	* generic/tdbc.h: Advance version number to 1.0.1

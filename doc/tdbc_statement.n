@@ -5,6 +5,7 @@
 '\"
 '\" See the file "license.terms" for information on usage and redistribution of
 '\" this file, and for a DISCLAIMER OF ALL WARRANTIES.
+.TH "tdbc::statement" n 8.6 Tcl "Tcl Database Connectivity"
 '\" .so man.macros
 '\" IGNORE
 .if t .wh -1.3i ^B
@@ -54,7 +55,6 @@
 .RE
 ..
 '\" END IGNORE
-.TH "tdbc::statement" n 8.6 Tcl "Tcl Database Connectivity"
 .BS
 .SH "NAME"
 tdbc::statement \- TDBC statement object
