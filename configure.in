@@ -173,7 +173,6 @@ AC_DEFINE(USE_TCL_STUBS, 1, [Use Tcl stubs])
 #--------------------------------------------------------------------
 
 TEA_MAKE_LIB
-TEAX_VC_MANIFEST
 
 #--------------------------------------------------------------------
 # Determine the name of the tclsh and/or wish executables in the
