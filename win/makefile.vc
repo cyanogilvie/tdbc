@@ -174,16 +174,16 @@ PROJECT = tdbc
 !endif
 # get project version from row AC_INIT([tdbc], [1.0b17])
 !if [echo DOTVERSION = \>> versions.vc] \
-   && [nmakehlp -V ..\configure.in AC_INIT >> versions.vc]
+   && [nmakehlp -V ..\configure.ac AC_INIT >> versions.vc]
 !endif
 !if [echo TCL_VERSION_REQ = \>> versions.vc] \
-   && [nmakehlp -V ..\configure.in TCL_VERSION_REQ >> versions.vc]
+   && [nmakehlp -V ..\configure.ac TCL_VERSION_REQ >> versions.vc]
 !endif
 !if [echo TCL_VERSION_DESIRED = \>> versions.vc] \
-   && [nmakehlp -V ..\configure.in TCL_VERSION_DESIRED >> versions.vc]
+   && [nmakehlp -V ..\configure.ac TCL_VERSION_DESIRED >> versions.vc]
 !endif
 !if [echo TCLOO_VERSION_REQ = \>> versions.vc] \
-   && [nmakehlp -V ..\configure.in TCLOO_VERSION_REQ >> versions.vc]
+   && [nmakehlp -V ..\configure.ac TCLOO_VERSION_REQ >> versions.vc]
 !endif
 
 !include "versions.vc"

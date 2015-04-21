@@ -2,8 +2,6 @@
 dnl	This file is an input file used by the GNU "autoconf" program to
 dnl	generate the file "configure", which is run during Tcl installation
 dnl	to configure the system for the local environment.
-#
-# RCS: @(#) $Id$
 
 #-----------------------------------------------------------------------
 # Set your package name and version numbers here.
@@ -11,6 +9,8 @@ dnl	to configure the system for the local environment.
 # This initializes the environment with PACKAGE_NAME and PACKAGE_VERSION
 # set as provided.  These will also be added as -D defs in your Makefile
 # so you can encode the package version directly into the source files.
+# This will also define a special symbol for Windows (BUILD_<PACKAGE_NAME>
+# so that we create the export library with the dll.
 #-----------------------------------------------------------------------
 
 AC_INIT([tdbc], [1.0.3])
@@ -21,8 +21,9 @@ AC_INIT([tdbc], [1.0.3])
 # as well as PKG_LIB_FILE and PKG_STUB_LIB_FILE.
 #--------------------------------------------------------------------
 
-AC_CONFIG_AUX_DIR(tclconfig)
 TEA_INIT([3.9])
+
+AC_CONFIG_AUX_DIR(tclconfig)
 
 #--------------------------------------------------------------------
 # Load the tclConfig.sh file
@@ -90,8 +91,8 @@ AC_C_INLINE
 # and PKG_TCL_SOURCES.
 #-----------------------------------------------------------------------
 
-TEA_ADD_SOURCES(tdbc.c tdbcStubInit.c tdbcTokenize.c)
-TEA_ADD_HEADERS(generic/tdbc.h generic/tdbcInt.h generic/tdbcDecls.h)
+TEA_ADD_SOURCES([tdbc.c tdbcStubInit.c tdbcTokenize.c])
+TEA_ADD_HEADERS([generic/tdbc.h generic/tdbcInt.h generic/tdbcDecls.h])
 if test "${TCL_MAJOR_VERSION}" -eq 8 ; then
   if test "${TCL_MINOR_VERSION}" -eq 5 ; then
     TEA_ADD_INCLUDES([${TCLOO_INCLUDE_SPEC}])
@@ -110,13 +111,14 @@ TEA_ADD_TCL_SOURCES([library/tdbc.tcl])
 #
 # Windows creates a few extra files that need to be cleaned up.
 # You can add more files to clean if your extension creates any extra
-# files.
+# files by extending CLEANFILES.
+# Add pkgIndex.tcl if it is generated in the Makefile instead of ./configure
+# and change Makefile.in to move it from CONFIG_CLEAN_FILES to BINARIES var.
 #
+# A few miscellaneous platform-specific items:
 # TEA_ADD_* any platform specific compiler/build info here.
 #--------------------------------------------------------------------
 
-# Add pkgIndex.tcl if it is generated in the Makefile instead of ./configure
-# and change Makefile.in to move it from CONFIG_CLEAN_FILES to BINARIES var.
 #CLEANFILES="$CLEANFILES pkgIndex.tcl"
 
 #--------------------------------------------------------------------
@@ -173,7 +175,6 @@ AC_DEFINE(USE_TCL_STUBS, 1, [Use Tcl stubs])
 #--------------------------------------------------------------------
 
 TEA_MAKE_LIB
-TEAX_VC_MANIFEST
 
 #--------------------------------------------------------------------
 # Determine the name of the tclsh and/or wish executables in the
@@ -206,24 +207,6 @@ TEAX_INCLUDE_LINE(tdbc_BUILD_INCLUDE_SPEC, [${tdbc_SRC_DIR}/generic])
 tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
 AC_SUBST(tdbc_LIB_DIR)
 
-dnl TEAX_LINK_LINE(TDBC_LIB_SPEC,
-dnl     [${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}], [${PACKAGE_NAME}])
-dnl TEAX_LINK_LINE(TDBC_STUB_LIB_SPEC,
-dnl     [${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}], [${PACKAGE_NAME}stub])
-dnl TEAX_LINK_LINE(TDBC_BUILD_STUB_LIB_SPEC,
-dnl     [${TDBC_BUILDDIR}], [${PACKAGE_NAME}stub])
-dnl TEAX_PATH_LINE(TDBC_STUB_LIB_PATH,
-dnl     [${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}/${PKG_STUB_LIB_FILE}])
-dnl TEAX_PATH_LINE(TDBC_BUILD_STUB_LIB_PATH,
-dnl     [${TDBC_BUILDDIR}/${PKG_STUB_LIB_FILE}])
-dnl 
-dnl AC_SUBST(srcdir)
-
-# TODO: CONFIGURE_OUTPUTS is allegedly obsolete. How best to fix it?
-
-CONFIGURE_OUTPUTS="Makefile pkgIndex.tcl tdbcConfig.sh config.cache config.log config.status"
-AC_SUBST(CONFIGURE_OUTPUTS)
-
 # Make the export configuration for the TDBC package
 
 TEA_EXPORT_CONFIG([tdbc])
@@ -231,8 +214,4 @@ TEA_EXPORT_CONFIG([tdbc])
 # Set up to produce Makefile from Makefile.in and tdbcConfig.sh from
 # tdbcConfig.sh.in.
 
-AC_CONFIG_FILES([Makefile pkgIndex.tcl tdbcConfig.sh])
-AC_OUTPUT
-
-# This is a comment added to force the 'execute' permission to update 
-# in the Fossil repository.
+AC_OUTPUT([Makefile pkgIndex.tcl tdbcConfig.sh])

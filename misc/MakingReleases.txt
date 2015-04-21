@@ -3,28 +3,28 @@ To advance the version number:
 (1) Edit the following files.
 
     tdbc/generic/tdbc.h - TDBC_VERSION and TDBC_PATCHLEVEL
-    tdbc/configure.in - AC_INIT()
+    tdbc/configure.ac - AC_INIT()
     tdbc/README
     tdbc/configure - Regenerate
     tdbc/ChangeLog
 
-    tdbcodbc/configure.in - AC_INIT()
+    tdbcodbc/configure.ac - AC_INIT()
     tdbcodbc/README
     tdbcodbc/configure - Regenerate
     tdbcodbc/ChangeLog
 
-    tdbcmysql/configure.in - AC_INIT()
+    tdbcmysql/configure.ac - AC_INIT()
     tdbcmysql/README
     tdbcmysql/configure - Regenerate
     tdbcmysql/ChangeLog
 
-    tdbcpostgres/configure.in - AC_INIT()
+    tdbcpostgres/configure.ac - AC_INIT()
     tdbcpostgres/README
     tdbcpostgres/configure - Regenerate
     tdbcpostgres/ChangeLog
 
     tdbcsqlite3/library/tdbcsqlite3.tcl - [package provide]
-    tdbcsqlite3/configure.in - AC_INIT()
+    tdbcsqlite3/configure.ac - AC_INIT()
     tdbcsqlite3/README
     tdbcsqlite3/configure - Regenerate
     tdbcsqlite3/ChangeLog

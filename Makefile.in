@@ -106,7 +106,6 @@ MAKE_LIB	= @MAKE_LIB@
 MAKE_SHARED_LIB	= @MAKE_SHARED_LIB@
 MAKE_STATIC_LIB	= @MAKE_STATIC_LIB@
 MAKE_STUB_LIB	= @MAKE_STUB_LIB@
-ADD_MANIFEST    = @ADD_MANIFEST@
 OBJEXT		= @OBJEXT@
 RANLIB		= @RANLIB@
 RANLIB_STUB	= @RANLIB_STUB@
@@ -154,7 +153,7 @@ INCLUDES	= @PKG_INCLUDES@ @TCL_INCLUDES@
 PKG_CFLAGS	= @PKG_CFLAGS@
 
 # TCL_DEFS is not strictly need here, but if you remove it, then you
-# must make sure that configure.in checks for the necessary components
+# must make sure that configure.ac checks for the necessary components
 # that your library may use.  TCL_DEFS can actually be a problem if
 # you do not compile with a similar machine setup as the Tcl core was
 # compiled with.
@@ -267,7 +266,6 @@ depend:
 $(PKG_LIB_FILE): $(PKG_OBJECTS)
 	-rm -f $(PKG_LIB_FILE)
 	${MAKE_LIB}
-	$(ADD_MANIFEST)
 	$(RANLIB) $(PKG_LIB_FILE)
 
 $(PKG_STUB_LIB_FILE): $(PKG_STUB_OBJECTS)
@@ -313,7 +311,7 @@ dist: dist-clean
 		$(srcdir)/aclocal.m4 $(srcdir)/configure $(srcdir)/*.in \
 		$(DIST_DIR)/
 	chmod 664 $(DIST_DIR)/Makefile.in $(DIST_DIR)/aclocal.m4
-	chmod 775 $(DIST_DIR)/configure $(DIST_DIR)/configure.in
+	chmod 775 $(DIST_DIR)/configure $(DIST_DIR)/configure.ac
 
 	for i in $(srcdir)/*.[ch]; do \
 	    if [ -f $$i ]; then \
@@ -380,7 +378,7 @@ genstubs: $(srcdir)/tools/genStubs.tcl $(srcdir)/generic/tdbc.decls
 
 #========================================================================
 # Don't modify the file to clean here.  Instead, set the "CLEANFILES"
-# variable in configure.in
+# variable in configure.ac
 #========================================================================
 
 clean:  
