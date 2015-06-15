@@ -9,8 +9,6 @@ dnl	to configure the system for the local environment.
 # This initializes the environment with PACKAGE_NAME and PACKAGE_VERSION
 # set as provided.  These will also be added as -D defs in your Makefile
 # so you can encode the package version directly into the source files.
-# This will also define a special symbol for Windows (BUILD_<PACKAGE_NAME>
-# so that we create the export library with the dll.
 #-----------------------------------------------------------------------
 
 AC_INIT([tdbc], [1.0.3])
@@ -104,12 +102,7 @@ TEA_ADD_STUB_SOURCES([tdbcStubLib.c])
 TEA_ADD_TCL_SOURCES([library/tdbc.tcl])
 
 #--------------------------------------------------------------------
-# A few miscellaneous platform-specific items:
 #
-# Define a special symbol for Windows (BUILD_sample in this case) so
-# that we create the export library with the dll.
-#
-# Windows creates a few extra files that need to be cleaned up.
 # You can add more files to clean if your extension creates any extra
 # files by extending CLEANFILES.
 # Add pkgIndex.tcl if it is generated in the Makefile instead of ./configure
@@ -204,7 +197,8 @@ TEAX_INCLUDE_LINE(tdbc_BUILD_INCLUDE_SPEC, [${tdbc_SRC_DIR}/generic])
 
 # Develop a fully qualified path for where .tcl files for the tdbc package
 # appear at run time.
-tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
+eval tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
+tdbc_LIB_DIR=`cd "${tdbc_LIB_DIR}"; pwd`
 AC_SUBST(tdbc_LIB_DIR)
 
 # Make the export configuration for the TDBC package

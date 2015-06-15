@@ -5733,12 +5733,7 @@ fi
 
 
 #--------------------------------------------------------------------
-# A few miscellaneous platform-specific items:
 #
-# Define a special symbol for Windows (BUILD_sample in this case) so
-# that we create the export library with the dll.
-#
-# Windows creates a few extra files that need to be cleaned up.
 # You can add more files to clean if your extension creates any extra
 # files by extending CLEANFILES.
 # Add pkgIndex.tcl if it is generated in the Makefile instead of ./configure
@@ -8941,7 +8936,8 @@ tdbc_SRC_DIR=`cd "${tdbc_SRC_DIR}"; pwd`
 
 # Develop a fully qualified path for where .tcl files for the tdbc package
 # appear at run time.
-tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
+eval tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
+tdbc_LIB_DIR=`cd "${tdbc_LIB_DIR}"; pwd`
 
 
 # Make the export configuration for the TDBC package
