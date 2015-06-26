@@ -1,7 +1,7 @@
 # genExtStubs.tcl --
 #
 #	Generates an import table for one or more external dynamic
-#	link libraries.  
+#	link libraries.
 #
 # Usage:
 #
@@ -41,13 +41,13 @@
 #	Returns a list of tuples. The possible tuples are:
 #
 #	    libraries NAME NAME...
-#		Sets the names of the 
+#		Sets the names of the
 #	    prefix NAME
 #	        Sets the name of the stub structure to NAME and prefixes
 #		all the definitions of the stubbed routines with NAME
 #	    import TYPE NAME PARAMS
 #		Declares the imported routine NAME to return data of type
-#		TYPE and accept parmeters PARAMS. 
+#		TYPE and accept parmeters PARAMS.
 
 proc parseImports {stubDefs} {
 
@@ -333,7 +333,7 @@ proc main {stubDefs stubStruct stubInit} {
     writeStubDeclarations $structFile $imports
     writeStructFooter $stubDefs $structFile
     set stubPrefix [writeStubDefines $structFile $imports]
-    chan puts $structFile "MODULE_SCOPE [file rootname [file tail $stubDefs]]\
+    chan puts $structFile "MODULE_SCOPE const [file rootname [file tail $stubDefs]]\
                            *${stubPrefix};"
     close $structFile
 
