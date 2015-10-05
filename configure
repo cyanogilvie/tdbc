@@ -6780,7 +6780,7 @@ $as_echo "found $CELIB_DIR" >&6; }
 		    runtime=-MD
 	        fi
 	        case "x`echo \${VisualStudioVersion}`" in
-	            x14-9*)
+	            x1[4-9]*)
 		        lflags="${lflags} -nodefaultlib:libucrt.lib"
 
     vars="ucrt.lib"
