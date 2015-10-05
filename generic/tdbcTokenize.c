@@ -26,7 +26,7 @@
  *	Tokenizes a SQL statement.
  *
  * Results:
- *	Returns a zero-reference Tcl object that gives the statement in 
+ *	Returns a zero-reference Tcl object that gives the statement in
  *	tokenized form, or NULL if an error occurs.
  *
  * Side effects:
@@ -138,7 +138,7 @@ Tdbc_TokenizeSql(
 		if (i > 0 && zSql[i-1] == ':') break;
 	    }
 		/* fallthru */
-	    
+
             case '$':
             case '@': {
                 if (i>0 && (isalnum((unsigned char)(zSql[i-1]))
@@ -214,5 +214,5 @@ TdbcTokenizeObjCmd(
 
     Tcl_SetObjResult(interp, retval);
     return TCL_OK;
-    
+
 }

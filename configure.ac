@@ -187,7 +187,7 @@ TEA_PROG_TCLSH
 
 # Develop a fully qualified path for the package source dir
 eval tdbc_SRC_DIR="${srcdir}"
-tdbc_SRC_DIR=`cd "${tdbc_SRC_DIR}"; pwd`
+tdbc_SRC_DIR=`cd "${tdbc_SRC_DIR}"; $CYGPATH $(pwd)`
 AC_SUBST(tdbc_SRC_DIR)
 
 # Develop -I specifications for the build and installed directories where
@@ -198,7 +198,7 @@ TEAX_INCLUDE_LINE(tdbc_BUILD_INCLUDE_SPEC, [${tdbc_SRC_DIR}/generic])
 # Develop a fully qualified path for where .tcl files for the tdbc package
 # appear at run time.
 eval tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
-tdbc_LIB_DIR=`cd "${tdbc_LIB_DIR}"; pwd`
+tdbc_LIB_DIR=`cd "${tdbc_LIB_DIR}"; $CYGPATH $(pwd)`
 AC_SUBST(tdbc_LIB_DIR)
 
 # Make the export configuration for the TDBC package

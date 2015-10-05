@@ -87,7 +87,7 @@ TdbcInitializeStubs(
 	} else {
 
 	    /* Everything is ok. Return the package information */
-	    
+
 	    tdbcStubsPtr = stubsPtr;
 	    return actualVersion;
 	}
