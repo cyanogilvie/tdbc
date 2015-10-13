@@ -192,6 +192,7 @@ all: binaries libraries doc
 #========================================================================
 
 binaries: $(BINARIES)
+	cp -p $(srcdir)/library/tdbc.tcl $(top_builddir)
 
 libraries:
 
