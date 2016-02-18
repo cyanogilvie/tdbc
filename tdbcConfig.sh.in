@@ -19,7 +19,7 @@ tdbc_LIB_FILE=@PKG_LIB_FILE@
 TDBC_LIB_FILE=@PKG_LIB_FILE@
 
 # String to pass to the linker to pick up the TDBC library from its build dir
-tdbc_BUIID_LIB_SPEC="@tdbc_LIB_SPEC@"
+tdbc_BUILD_LIB_SPEC="@tdbc_LIB_SPEC@"
 TDBC_BUILD_LIB_SPEC="@tdbc_LIB_SPEC@"
 
 # String to pass to the linker to pick up the TDBC library from its installed
