@@ -9045,7 +9045,9 @@ tdbc_SRC_DIR=`cd "${tdbc_SRC_DIR}"; $CYGPATH $(pwd)`
 # Develop a fully qualified path for where .tcl files for the tdbc package
 # appear at run time.
 eval tdbc_LIB_DIR="${libdir}/${PACKAGE_NAME}${PACKAGE_VERSION}"
-tdbc_LIB_DIR=`cd "${tdbc_LIB_DIR}"; $CYGPATH $(pwd)`
+if test -d "${tdbc_LIB_DIR}" ; then
+    tdbc_LIB_DIR=`cd "${tdbc_LIB_DIR}"; $CYGPATH $(pwd)`
+fi
 
 
 # Make the export configuration for the TDBC package
