@@ -429,6 +429,7 @@ oo::class create ::tdbc::connection {
              WHERE 1=1
                  $clause1
                  $clause2
+             ORDER BY \"foreignConstraintCatalog\", \"foreignConstraintSchema\", \"foreignConstraintName\", \"ordinalPosition\"
 "]
 		dict set foreignKeysStatement $exists1 $exists2 $stmt
 	    }
