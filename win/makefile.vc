@@ -54,9 +54,6 @@ PRJHEADERS = \
 
 INCLUDE_INSTALL_DIR	= $(_INSTALLDIR)\..\include
 
-### Declarations common to all compiler options
-#cwarn = $(WARNINGS) -D _CRT_SECURE_NO_DEPRECATE -D _CRT_NONSTDC_NO_DEPRECATE
-
 # Define the standard targets including install, test, shell
 !include "$(_RULESDIR)\targets.vc"
 
