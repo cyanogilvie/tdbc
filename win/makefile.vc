@@ -16,10 +16,11 @@
 #
 #------------------------------------------------------------------------------
 
-
 PROJECT         = tdbc
 NEED_TCL_SOURCE = 1
 PRJ_RCFILE      = tdbc.rc
+# Tcl 8.6 etc. compile with /DUNICODE. TDBC pre-nmake reform compiled
+# without -DUNICODE. Keep that behaviour for now. TBD
 USE_WIDECHAR_API  = 0
 
 !include "rules-ext.vc"
@@ -56,31 +57,10 @@ INCLUDE_INSTALL_DIR	= $(_INSTALLDIR)\..\include
 ### Declarations common to all compiler options
 #cwarn = $(WARNINGS) -D _CRT_SECURE_NO_DEPRECATE -D _CRT_NONSTDC_NO_DEPRECATE
 
-# Define the standard targets
+# Define the standard targets including install, test, shell
 !include "$(_RULESDIR)\targets.vc"
 
-xtest: setup $(PROJECT)
-	@set TCL_LIBRARY=$(TCL_LIBRARY:\=/)
-	@set TCLLIBPATH=$(OUT_DIR:\=/)
-	@set TDBC_LIBRARY=$(LIBDIR:\=/)
-	@$(CPY) $(LIBDIR)\*.tcl $(OUT_DIR)
-!if $(TCLINSTALL)
-	@set PATH=$(_TCLDIR)\bin;$(PATH)
-!else
-	@set PATH=$(_TCLDIR)\win\$(BUILDDIRTOP);$(PATH)
-!endif
-	$(DEBUGGER) $(TCLSH) "$(ROOT)/tests/all.tcl" $(TESTFLAGS)
-
-xshell: setup $(PROJECT)
-	@set TCL_LIBRARY=$(TCL_LIBRARY:\=/)
-	@set TDBC_LIBRARY=$(LIBDIR:\=/)
-!if $(TCLINSTALL)
-	@set PATH=$(_TCLDIR)\bin;$(PATH)
-!else
-	@set PATH=$(_TCLDIR)\win\$(BUILDDIRTOP);$(PATH)
-!endif
-	$(DEBUGGER) $(TCLSH) $(SCRIPT)
-
+$(PRJ_OBJS): $(PRJHEADERS)
 
 # The TIP 477 generation of pkgIndex.tcl from pkgIndex.tcl.in does not include
 # all replacements below so define our own it.
