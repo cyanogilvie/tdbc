@@ -20,6 +20,7 @@
 PROJECT         = tdbc
 NEED_TCL_SOURCE = 1
 PRJ_RCFILE      = tdbc.rc
+USE_WIDECHAR_API  = 0
 
 !include "rules-ext.vc"
 
