@@ -47,17 +47,16 @@ PRJ_OBJS = \
 PRJ_STUBOBJS = \
 	$(TMP_DIR)\tdbcStubLib.obj
 
-PRJHEADERS = \
+PRJ_HEADERS_PUBLIC = \
 	$(GENERICDIR)\tdbc.h \
-	$(GENERICDIR)\tdbcDecls.h \
-	$(GENERICDIR)\tdbcInt.h
+	$(GENERICDIR)\tdbcDecls.h
 
-INCLUDE_INSTALL_DIR	= $(_INSTALLDIR)\..\include
+PRJ_HEADERS = \
+	$(PRJ_HEADERS_PUBLIC) \
+	 $(GENERICDIR)\tdbcInt.h
 
 # Define the standard targets including install, test, shell
 !include "$(_RULESDIR)\targets.vc"
-
-$(PRJ_OBJS): $(PRJHEADERS)
 
 # The TIP 477 generation of pkgIndex.tcl from pkgIndex.tcl.in does not include
 # all replacements below so define our own it.
@@ -95,14 +94,10 @@ $(OUT_DIR)\tdbcConfig.sh: $(ROOT)\tdbcConfig.sh.in
 
 # TDBC has additional installation in addition to that provided by
 # the default installation targets.
-install: default-install-stubs default-install-docs-n
+install: default-install-docs-n
 default-install-libraries: install-tdbc-extras
 
 install-tdbc-extras: $(OUT_DIR)\tdbcConfig.sh
 	@$(CPY) $(OUT_DIR)\tdbcConfig.sh "$(LIB_INSTALL_DIR)"
-	@echo Installing header files in '$(INCLUDE_INSTALL_DIR)'
-	@$(CPY) "$(GENERICDIR)\tdbc.h"      "$(INCLUDE_INSTALL_DIR)\"
-	@$(CPY) "$(GENERICDIR)\tdbcDecls.h" "$(INCLUDE_INSTALL_DIR)\"
-
 
 
