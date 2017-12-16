@@ -112,7 +112,7 @@ TEA_ADD_TCL_SOURCES([library/tdbc.tcl])
 # TEA_ADD_* any platform specific compiler/build info here.
 #--------------------------------------------------------------------
 
-#CLEANFILES="$CLEANFILES pkgIndex.tcl"
+CLEANFILES="$CLEANFILES tdbc.tcl"
 
 #--------------------------------------------------------------------
 # Choose which headers you need.  Extension authors should try very

@@ -61,7 +61,7 @@ PKG_LIB_FILE	= @PKG_LIB_FILE@
 PKG_STUB_LIB_FILE = @PKG_STUB_LIB_FILE@
 
 lib_BINARIES	= $(PKG_LIB_FILE) $(PKG_STUB_LIB_FILE)
-BINARIES	= $(lib_BINARIES)
+BINARIES	= $(lib_BINARIES) tdbc.tcl
 
 SHELL		= @SHELL@
 
@@ -192,7 +192,6 @@ all: binaries libraries doc
 #========================================================================
 
 binaries: $(BINARIES)
-	cp -p $(srcdir)/library/tdbc.tcl $(top_builddir)
 
 libraries:
 
@@ -280,6 +279,13 @@ $(PKG_STUB_LIB_FILE): $(PKG_STUB_OBJECTS)
 	-rm -f $(PKG_STUB_LIB_FILE)
 	${MAKE_STUB_LIB}
 	$(RANLIB_STUB) $(PKG_STUB_LIB_FILE)
+
+#========================================================================
+# Tcl sources.
+#========================================================================
+
+tdbc.tcl:
+	cp $(srcdir)/library/tdbc.tcl .
 
 #========================================================================
 # We need to enumerate the list of .c to .o lines here.
