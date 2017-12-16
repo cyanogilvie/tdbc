@@ -61,7 +61,7 @@ PKG_LIB_FILE	= @PKG_LIB_FILE@
 PKG_STUB_LIB_FILE = @PKG_STUB_LIB_FILE@
 
 lib_BINARIES	= $(PKG_LIB_FILE) $(PKG_STUB_LIB_FILE)
-BINARIES	= $(lib_BINARIES) tdbc.tcl
+BINARIES	= $(lib_BINARIES)
 
 SHELL		= @SHELL@
 
@@ -86,7 +86,7 @@ pkgincludedir	= $(includedir)/$(PKG_DIR)
 top_builddir	= .
 
 INSTALL_OPTIONS	=
-INSTALL		= @INSTALL@ ${INSTALL_OPTIONS}
+INSTALL		= @INSTALL@ $(INSTALL_OPTIONS)
 INSTALL_DATA_DIR = @INSTALL_DATA_DIR@
 INSTALL_DATA	= @INSTALL_DATA@
 INSTALL_PROGRAM	= @INSTALL_PROGRAM@
@@ -238,9 +238,7 @@ install-doc: doc
 	done
 
 test: binaries libraries
-	@$(TCLSH) `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS) \
-		-load "package ifneeded ${PACKAGE_NAME} ${PACKAGE_VERSION} \
-			[list source `@CYGPATH@ $(srcdir)/library/tdbc.tcl`]\;[list load `@CYGPATH@ $(PKG_LIB_FILE)` $(PACKAGE_NAME)]"
+	$(TCLSH) `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS)
 
 shell: binaries libraries
 	@$(TCLSH) $(SCRIPT)
@@ -279,13 +277,6 @@ $(PKG_STUB_LIB_FILE): $(PKG_STUB_OBJECTS)
 	-rm -f $(PKG_STUB_LIB_FILE)
 	${MAKE_STUB_LIB}
 	$(RANLIB_STUB) $(PKG_STUB_LIB_FILE)
-
-#========================================================================
-# Tcl sources.
-#========================================================================
-
-tdbc.tcl:
-	cp $(srcdir)/library/tdbc.tcl .
 
 #========================================================================
 # We need to enumerate the list of .c to .o lines here.
@@ -450,7 +441,10 @@ install-lib-binaries: binaries
 	done
 	@if test "x$(SHARED_BUILD)" = "x1"; then \
 	    echo " Install pkgIndex.tcl $(DESTDIR)$(pkglibdir)"; \
-	    $(INSTALL_DATA) pkgIndex.tcl $(DESTDIR)$(pkglibdir); \
+	    sed -e "s/`echo $(srcdir)|sed -e 's/[.]/[&]/g'` library //" \
+		-e "s/ when building//" \
+		< pkgIndex.tcl > $(DESTDIR)$(pkglibdir)/pkgIndex.tcl \
+		&& chmod 644 $(DESTDIR)$(pkglibdir)/pkgIndex.tcl; \
 	fi
 	@echo " Install tdbcConfig.sh $(DESTDIR)$(pkglibdir)"; \
 	$(INSTALL_DATA) tdbcConfig.sh $(DESTDIR)$(pkglibdir)/tdbcConfig.sh
