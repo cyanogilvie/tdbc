@@ -441,10 +441,7 @@ install-lib-binaries: binaries
 	done
 	@if test "x$(SHARED_BUILD)" = "x1"; then \
 	    echo " Install pkgIndex.tcl $(DESTDIR)$(pkglibdir)"; \
-	    sed -e "s/`echo $(srcdir)|sed -e 's/[.]/[&]/g'` library //" \
-		-e "s/ when building//" \
-		< pkgIndex.tcl > $(DESTDIR)$(pkglibdir)/pkgIndex.tcl \
-		&& chmod 644 $(DESTDIR)$(pkglibdir)/pkgIndex.tcl; \
+	    $(INSTALL_DATA) pkgIndex.tcl $(DESTDIR)$(pkglibdir); \
 	fi
 	@echo " Install tdbcConfig.sh $(DESTDIR)$(pkglibdir)"; \
 	$(INSTALL_DATA) tdbcConfig.sh $(DESTDIR)$(pkglibdir)/tdbcConfig.sh
