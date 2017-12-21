@@ -374,6 +374,7 @@ dist: dist-clean
 
 	mkdir $(DIST_DIR)/win
 	cp -p $(srcdir)/win/makefile.vc $(srcdir)/win/nmakehlp.c \
+		$(srcdir)/win/rules-ext.vc $(srcdir)/win/targets.vc \
 		$(srcdir)/win/rules.vc $(srcdir)/win/tdbc.rc \
 		$(DIST_DIR)/win/
 
