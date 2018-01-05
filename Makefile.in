@@ -61,7 +61,7 @@ PKG_LIB_FILE	= @PKG_LIB_FILE@
 PKG_STUB_LIB_FILE = @PKG_STUB_LIB_FILE@
 
 lib_BINARIES	= $(PKG_LIB_FILE) $(PKG_STUB_LIB_FILE)
-BINARIES	= $(lib_BINARIES) tdbc.tcl
+BINARIES	= $(lib_BINARIES)
 
 SHELL		= @SHELL@
 
@@ -238,9 +238,7 @@ install-doc: doc
 	done
 
 test: binaries libraries
-	@$(TCLSH) `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS) \
-		-load "package ifneeded ${PACKAGE_NAME} ${PACKAGE_VERSION} \
-			[list source `@CYGPATH@ $(srcdir)/library/tdbc.tcl`]\;[list load `@CYGPATH@ $(PKG_LIB_FILE)` $(PACKAGE_NAME)]"
+	$(TCLSH) `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS)
 
 shell: binaries libraries
 	@$(TCLSH) $(SCRIPT)
@@ -279,13 +277,6 @@ $(PKG_STUB_LIB_FILE): $(PKG_STUB_OBJECTS)
 	-rm -f $(PKG_STUB_LIB_FILE)
 	${MAKE_STUB_LIB}
 	$(RANLIB_STUB) $(PKG_STUB_LIB_FILE)
-
-#========================================================================
-# Tcl sources.
-#========================================================================
-
-tdbc.tcl:
-	cp $(srcdir)/library/tdbc.tcl .
 
 #========================================================================
 # We need to enumerate the list of .c to .o lines here.
