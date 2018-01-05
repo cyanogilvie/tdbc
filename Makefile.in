@@ -308,32 +308,36 @@ COMPRESS	= tar zcvf $(PKG_DIR).tar.gz $(PKG_DIR)
 DIST_ROOT	= /tmp/dist
 DIST_DIR	= $(DIST_ROOT)/$(PKG_DIR)
 
+DIST_INSTALL_DATA	= CPPROG='cp -p' $(INSTALL) -m 644
+DIST_INSTALL_SCRIPT	= CPPROG='cp -p' $(INSTALL) -m 755
+
 dist-clean:
 	rm -rf $(DIST_DIR) $(DIST_ROOT)/$(PKG_DIR).tar.*
 
 dist: dist-clean
 	$(INSTALL_DATA_DIR) $(DIST_DIR)
-	cp -p $(srcdir)/ChangeLog $(srcdir)/README* $(srcdir)/license* \
-		$(srcdir)/aclocal.m4 $(srcdir)/configure $(srcdir)/*.in \
-		$(srcdir)/configure.ac $(DIST_DIR)/
-	chmod 664 $(DIST_DIR)/Makefile.in $(DIST_DIR)/aclocal.m4
-	chmod 775 $(DIST_DIR)/configure $(DIST_DIR)/configure.ac
+	$(DIST_INSTALL_DATA) $(srcdir)/license.terms \
+		$(srcdir)/ChangeLog $(srcdir)/README \
+		$(srcdir)/aclocal.m4 $(srcdir)/configure.ac \
+		$(srcdir)/Makefile.in $(srcdir)/pkgIndex.tcl.in \
+		$(srcdir)/tdbcConfig.sh.in \
+		$(DIST_DIR)/
+	$(DIST_INSTALL_SCRIPT) $(srcdir)/configure $(DIST_DIR)/
 
 	for i in $(srcdir)/*.[ch]; do \
 	    if [ -f $$i ]; then \
-		cp -p $$i $(DIST_DIR)/ ; \
+		$(DIST_INSTALL_DATA) $$i $(DIST_DIR)/ ; \
 	    fi; \
 	done;
 
 	$(INSTALL_DATA_DIR) $(DIST_DIR)/tclconfig
-	cp -p $(srcdir)/tclconfig/install-sh $(srcdir)/tclconfig/tcl.m4 \
-		$(srcdir)/tclconfig/ChangeLog $(srcdir)/tclconfig/README.txt \
+	$(DIST_INSTALL_DATA) $(srcdir)/tclconfig/README.txt \
+		$(srcdir)/tclconfig/tcl.m4 $(srcdir)/tclconfig/install-sh \
 		$(DIST_DIR)/tclconfig/
-	chmod 664 $(DIST_DIR)/tclconfig/tcl.m4
-	chmod +x $(DIST_DIR)/tclconfig/install-sh
 
-	mkdir $(DIST_DIR)/doc
-	cp -p $(srcdir)/doc/tdbc.n $(srcdir)/doc/tdbc_connection.n \
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/doc
+	$(DIST_INSTALL_DATA) $(srcdir)/doc/tdbc.n \
+		$(srcdir)/doc/tdbc_connection.n \
 		$(srcdir)/doc/tdbc_resultset.n \
 		$(srcdir)/doc/tdbc_statement.n \
 		$(srcdir)/doc/tdbc_mapSqlState.n \
@@ -341,30 +345,31 @@ dist: dist-clean
 		$(srcdir)/doc/Tdbc_Init.3 \
 		$(DIST_DIR)/doc/
 
-	mkdir $(DIST_DIR)/generic
-	cp -p $(srcdir)/generic/tdbc.c $(srcdir)/generic/tdbc.decls \
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/generic
+	$(DIST_INSTALL_DATA) $(srcdir)/generic/tdbc.c $(srcdir)/generic/tdbc.decls \
 		$(srcdir)/generic/tdbc.h $(srcdir)/generic/tdbcDecls.h \
 		$(srcdir)/generic/tdbcInt.h $(srcdir)/generic/tdbcStubInit.c \
 		$(srcdir)/generic/tdbcStubLib.c \
 		$(srcdir)/generic/tdbcTokenize.c $(DIST_DIR)/generic/
 
-	mkdir $(DIST_DIR)/library
-	cp -p $(srcdir)/library/tdbc.tcl $(DIST_DIR)/library/
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/library
+	$(DIST_INSTALL_DATA) $(srcdir)/library/tdbc.tcl $(DIST_DIR)/library/
 
-	mkdir $(DIST_DIR)/tests
-	cp -p $(srcdir)/tests/all.tcl \
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/tests
+	$(DIST_INSTALL_DATA) $(srcdir)/tests/all.tcl \
 		$(srcdir)/tests/tdbc.test \
 		$(srcdir)/tests/tokenize.test \
 		$(DIST_DIR)/tests/
 
-	mkdir $(DIST_DIR)/tools
-	cp -p $(srcdir)/tools/genExtStubs.tcl \
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/tools
+	$(DIST_INSTALL_DATA) $(srcdir)/tools/genExtStubs.tcl \
 		$(srcdir)/tools/genStubs.tcl \
 		$(srcdir)/tools/tdbc-man2html.tcl \
 		$(DIST_DIR)/tools/
 
-	mkdir $(DIST_DIR)/win
-	cp -p $(srcdir)/win/makefile.vc $(srcdir)/win/nmakehlp.c \
+	$(INSTALL_DATA_DIR) $(DIST_DIR)/win
+	$(DIST_INSTALL_DATA) $(srcdir)/win/makefile.vc $(srcdir)/win/nmakehlp.c \
+		$(srcdir)/win/targets.vc $(srcdir)/win/rules-ext.vc \
 		$(srcdir)/win/rules.vc $(srcdir)/win/tdbc.rc \
 		$(DIST_DIR)/win/
 
