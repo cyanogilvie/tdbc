@@ -4,11 +4,19 @@ dnl	generate the file "configure", which is run during Tcl installation
 dnl	to configure the system for the local environment.
 
 #-----------------------------------------------------------------------
+# Sample configure.ac for Tcl Extensions.  The only places you should
+# need to modify this file are marked by the string __CHANGE__
+#-----------------------------------------------------------------------
+
+#-----------------------------------------------------------------------
+# __CHANGE__
 # Set your package name and version numbers here.
 #
 # This initializes the environment with PACKAGE_NAME and PACKAGE_VERSION
 # set as provided.  These will also be added as -D defs in your Makefile
 # so you can encode the package version directly into the source files.
+# This will also define a special symbol for Windows (BUILD_<PACKAGE_NAME>
+# so that we create the export library with the dll.
 #-----------------------------------------------------------------------
 
 AC_INIT([tdbc], [1.0.6])
@@ -78,9 +86,15 @@ TEA_PREFIX
 #-----------------------------------------------------------------------
 
 TEA_SETUP_COMPILER
+
+#-----------------------------------------------------------------------
+# Setup inlining if available.
+#-----------------------------------------------------------------------
+
 AC_C_INLINE
 
 #-----------------------------------------------------------------------
+# __CHANGE__
 # Specify the C source files to compile in TEA_ADD_SOURCES,
 # public headers that need to be installed in TEA_ADD_HEADERS,
 # stub library C source files to compile in TEA_ADD_STUB_SOURCES,
@@ -102,6 +116,7 @@ TEA_ADD_STUB_SOURCES([tdbcStubLib.c])
 TEA_ADD_TCL_SOURCES([library/tdbc.tcl])
 
 #--------------------------------------------------------------------
+# __CHANGE__
 #
 # You can add more files to clean if your extension creates any extra
 # files by extending CLEANFILES.
@@ -113,8 +128,20 @@ TEA_ADD_TCL_SOURCES([library/tdbc.tcl])
 #--------------------------------------------------------------------
 
 #CLEANFILES="$CLEANFILES pkgIndex.tcl"
+if test "${TEA_PLATFORM}" = "windows" ; then
+    # Ensure no empty if clauses
+    :
+    #TEA_ADD_SOURCES([win/winFile.c])
+    #TEA_ADD_INCLUDES([-I\"$(${CYGPATH} ${srcdir}/win)\"])
+else
+    # Ensure no empty else clauses
+    :
+    #TEA_ADD_SOURCES([unix/unixFile.c])
+    #TEA_ADD_LIBS([-lsuperfly])
+fi
 
 #--------------------------------------------------------------------
+# __CHANGE__
 # Choose which headers you need.  Extension authors should try very
 # hard to only rely on the Tcl public header files.  Internal headers
 # contain private data structures and are subject to change without
@@ -123,6 +150,11 @@ TEA_ADD_TCL_SOURCES([library/tdbc.tcl])
 #--------------------------------------------------------------------
 
 TEA_PUBLIC_TCL_HEADERS
+#TEA_PRIVATE_TCL_HEADERS
+
+#TEA_PUBLIC_TK_HEADERS
+#TEA_PRIVATE_TK_HEADERS
+#TEA_PATH_X
 
 #--------------------------------------------------------------------
 # Check whether --enable-threads or --disable-threads was given.
@@ -153,15 +185,6 @@ TEA_CONFIG_CFLAGS
 TEA_ENABLE_SYMBOLS
 
 #--------------------------------------------------------------------
-# Everyone should be linking against the Tcl stub library.  If you
-# can't for some reason, remove this definition.  If you aren't using
-# stubs, you also need to modify the SHLIB_LD_LIBS setting below to
-# link against the non-stubbed Tcl library.  Add Tk too if necessary.
-#--------------------------------------------------------------------
-
-AC_DEFINE(USE_TCL_STUBS, 1, [Use Tcl stubs])
-
-#--------------------------------------------------------------------
 # This macro generates a line to use when building a library.  It
 # depends on values set by the TEA_ENABLE_SHARED, TEA_ENABLE_SYMBOLS,
 # and TEA_LOAD_TCLCONFIG macros above.
@@ -178,11 +201,12 @@ TEA_MAKE_LIB
 #--------------------------------------------------------------------
 
 TEA_PROG_TCLSH
+#TEA_PROG_WISH
 
 #--------------------------------------------------------------------
 # Finally, substitute all of the various values into the Makefile.
 # You may alternatively have a special pkgIndex.tcl.in or other files
-# which require substituting th AC variables in.  Include these here.
+# which require substituting the AC variables in. Include these here.
 #--------------------------------------------------------------------
 
 # Develop a fully qualified path for the package source dir

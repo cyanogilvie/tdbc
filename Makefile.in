@@ -83,7 +83,7 @@ pkgdatadir	= $(datadir)/$(PKG_DIR)
 pkglibdir	= $(libdir)/$(PKG_DIR)
 pkgincludedir	= $(includedir)/$(PKG_DIR)
 
-top_builddir	= .
+top_builddir	= @abs_top_builddir@
 
 INSTALL_OPTIONS	=
 INSTALL		= @INSTALL@ $(INSTALL_OPTIONS)
@@ -133,15 +133,15 @@ TCLLIBPATH	= $(top_builddir)
 TCLSH_ENV	= TCL_LIBRARY=`@CYGPATH@ $(TCL_SRC_DIR)/library`
 PKG_ENV		= @LD_LIBRARY_PATH_VAR@="$(EXTRA_PATH):$(@LD_LIBRARY_PATH_VAR@)" \
 		  PATH="$(EXTRA_PATH):$(PATH)" \
-		  TCLLIBPATH="$(TCLLIBPATH)" \
-		  TDBC_LIBRARY=`@CYGPATH@ $(srcdir)/library` 
+		  TDBC_LIBRARY=`@CYGPATH@ $(srcdir)/library` \
+		  TCLLIBPATH="$(TCLLIBPATH)"
 
 TCLSH_PROG	= @TCLSH_PROG@
-TCLSH		= $(PKG_ENV) $(TCLSH_ENV) $(TCLSH_PROG)
+TCLSH		= $(TCLSH_ENV) $(PKG_ENV) $(TCLSH_PROG)
 
 #WISH_ENV	= TK_LIBRARY=`@CYGPATH@ $(TK_SRC_DIR)/library`
 #WISH_PROG	= @WISH_PROG@
-#WISH		= $(PKG_ENV) $(TCLSH_ENV) $(WISH_ENV) $(WISH_PROG)
+#WISH		= $(TCLSH_ENV) $(WISH_ENV) $(PKG_ENV) $(WISH_PROG)
 
 SHARED_BUILD	= @SHARED_BUILD@
 
@@ -167,6 +167,11 @@ LIBS		= @PKG_LIBS@ @LIBS@
 AR		= @AR@
 CFLAGS		= @CFLAGS@
 COMPILE		= $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+
+GDB		= gdb
+VALGRIND	= valgrind
+VALGRINDARGS	= --tool=memcheck --num-callers=8 --leak-resolution=high \
+		  --leak-check=yes --show-reachable=yes -v
 
 .SUFFIXES: .c .$(OBJEXT)
 
@@ -244,17 +249,21 @@ shell: binaries libraries
 	@$(TCLSH) $(SCRIPT)
 
 gdb:
-	$(TCLSH_ENV) gdb $(TCLSH_PROG) $(SCRIPT)
+	$(TCLSH_ENV) $(PKG_ENV) $(GDB) $(TCLSH_PROG) $(SCRIPT)
 
-VALGRINDARGS =	--tool=memcheck --num-callers=8 --leak-resolution=high \
-		--leak-check=yes --show-reachable=yes -v
+gdb-test: binaries libraries 
+	$(TCLSH_ENV) $(PKG_ENV) $(GDB) \
+	    --args $(TCLSH_PROG) `@CYGPATH@ $(srcdir)/tests/all.tcl` \
+	    $(TESTFLAGS) -singleproc 1 \
+	    -load "package ifneeded $(PACKAGE_NAME) $(PACKAGE_VERSION) \
+		[list load `@CYGPATH@ $(PKG_LIB_FILE)` $(PACKAGE_NAME)]"
 
 valgrind: binaries libraries
-	$(TCLSH_ENV) valgrind $(VALGRINDARGS) $(TCLSH_PROG) \
-		`@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS)
+	$(TCLSH_ENV) $(PKG_ENV) $(VALGRIND) $(VALGRINDARGS) $(TCLSH_PROG) \
+	    `@CYGPATH@ $(srcdir)/tests/all.tcl` $(TESTFLAGS)
 
 valgrindshell: binaries libraries
-	$(TCLSH_ENV) valgrind $(VALGRINDARGS) $(TCLSH_PROG) $(SCRIPT)
+	$(TCLSH_ENV) $(PKG_ENV) $(VALGRIND) $(VALGRINDARGS) $(TCLSH_PROG) $(SCRIPT)
 
 depend:
 
@@ -316,24 +325,26 @@ dist-clean:
 
 dist: dist-clean
 	$(INSTALL_DATA_DIR) $(DIST_DIR)
-	$(DIST_INSTALL_DATA) $(srcdir)/license.terms \
-		$(srcdir)/ChangeLog $(srcdir)/README \
-		$(srcdir)/aclocal.m4 $(srcdir)/configure.ac \
-		$(srcdir)/Makefile.in $(srcdir)/pkgIndex.tcl.in \
-		$(srcdir)/tdbcConfig.sh.in \
-		$(DIST_DIR)/
-	$(DIST_INSTALL_SCRIPT) $(srcdir)/configure $(DIST_DIR)/
 
-	for i in $(srcdir)/*.[ch]; do \
-	    if [ -f $$i ]; then \
-		$(DIST_INSTALL_DATA) $$i $(DIST_DIR)/ ; \
-	    fi; \
-	done;
+	# TEA files
+	$(DIST_INSTALL_DATA) $(srcdir)/Makefile.in \
+	    $(srcdir)/aclocal.m4 $(srcdir)/configure.ac \
+	    $(DIST_DIR)/
+	$(DIST_INSTALL_SCRIPT) $(srcdir)/configure $(DIST_DIR)/
 
 	$(INSTALL_DATA_DIR) $(DIST_DIR)/tclconfig
 	$(DIST_INSTALL_DATA) $(srcdir)/tclconfig/README.txt \
-		$(srcdir)/tclconfig/tcl.m4 $(srcdir)/tclconfig/install-sh \
-		$(DIST_DIR)/tclconfig/
+	    $(srcdir)/tclconfig/tcl.m4 $(srcdir)/tclconfig/install-sh \
+	    $(DIST_DIR)/tclconfig/
+
+	# Extension files
+	$(DIST_INSTALL_DATA) \
+	    $(srcdir)/ChangeLog \
+	    $(srcdir)/license.terms \
+	    $(srcdir)/README \
+	    $(srcdir)/pkgIndex.tcl.in \
+	    $(srcdir)/tdbcConfig.sh.in \
+	    $(DIST_DIR)/
 
 	$(INSTALL_DATA_DIR) $(DIST_DIR)/doc
 	$(DIST_INSTALL_DATA) $(srcdir)/doc/tdbc.n \
@@ -419,14 +430,6 @@ install-lib-binaries: binaries
 	  if test -f $$p; then \
 	    echo " $(INSTALL_LIBRARY) $$p $(DESTDIR)$(pkglibdir)/$$p"; \
 	    $(INSTALL_LIBRARY) $$p $(DESTDIR)$(pkglibdir)/$$p; \
-	    stub=`echo $$p|sed -e "s/.*\(stub\).*/\1/"`; \
-	    if test "x$$stub" = "xstub"; then \
-		echo " $(RANLIB_STUB) $(DESTDIR)$(pkglibdir)/$$p"; \
-		$(RANLIB_STUB) $(DESTDIR)$(pkglibdir)/$$p; \
-	    else \
-		echo " $(RANLIB) $(DESTDIR)$(pkglibdir)/$$p"; \
-		$(RANLIB) $(DESTDIR)$(pkglibdir)/$$p; \
-	    fi; \
 	    ext=`echo $$p|sed -e "s/.*\.//"`; \
 	    if test "x$$ext" = "xdll"; then \
 		lib=`basename $$p|sed -e 's/.[^.]*$$//'`.lib; \
@@ -486,6 +489,7 @@ uninstall-binaries:
 	done
 
 .PHONY: all binaries clean depend distclean doc install libraries test
+.PHONY: gdb gdb-test valgrind valgrindshell
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
