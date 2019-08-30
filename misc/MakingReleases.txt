@@ -76,7 +76,7 @@ To advance the version number:
         --srcdir=. --htmldir=/tmp/dist/tdbc${VERSION}-doc \
         --tdbc --tdbcmysql --tdbcodbc --tdbcpostgres --tdbcsqlite3
 
-    Result is a /tmp/dist/tdbc${VERSION}-doc directory containing the 
+    Result is a /tmp/dist/tdbc${VERSION}-doc directory containing the
     HTML manual.
 
 (8) Sync with tdbc.tcl.tk

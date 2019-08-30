@@ -13,7 +13,7 @@ for the base classes and SQL tokenizer of Tcl Database Connectivity. It
 is not very useful by itself; to access databases, you also need one
 or more driver modules for the database manager(s) that you intend to use.
 The drivers are available from http://tdbc.tcl.tk along with the
-source code of this module. A bug database and Wiki are available 
+source code of this module. A bug database and Wiki are available
 at the same location.
 
 TDBC is a freely-available open source package.  You can do virtually

@@ -77,7 +77,7 @@ proc doit {file} {
 walk . doit
 
 
-	    
+
 	return
     }
     puts "Ignoring: $file"
@@ -86,6 +86,5 @@ walk . doit
 walk . doit
 
 
-	    
 
-	      
+

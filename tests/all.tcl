@@ -6,7 +6,7 @@
 #
 # Copyright (c) 1998-2000 by Scriptics Corporation.
 # All rights reserved.
-# 
+#
 # RCS: @(#) $Id$
 
 package require Tcl 8.5

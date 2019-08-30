@@ -60,7 +60,7 @@ test tokenize-4.2 {unterminated quote} {
 test tokenize-4.3 {unterminated quote} {
     ::tdbc::tokenize "\[ unterminated quote"
 } [list "\[ unterminated quote"]
-	    
+
 cleanupTests
 return
 

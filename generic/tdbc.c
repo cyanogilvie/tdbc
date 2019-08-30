@@ -191,7 +191,10 @@ TdbcMapSqlStateObjCmd(
  *-----------------------------------------------------------------------------
  */
 
-int
+#ifdef __cplusplus
+extern "C" {
+#endif  /* __cplusplus */
+DLLEXPORT int
 Tdbc_Init(
     Tcl_Interp* interp		/* Tcl interpreter */
 ) {
@@ -221,3 +224,7 @@ Tdbc_Init(
     return TCL_OK;
 
 }
+
+#ifdef __cplusplus
+}
+#endif  /* __cplusplus */

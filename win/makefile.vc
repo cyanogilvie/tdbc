@@ -10,7 +10,7 @@
 # For other build options (debug, static etc.)
 # See TIP 477 (https://core.tcl.tk/tips/doc/trunk/tip/477.md) for
 # detailed documentation.
-# 
+#
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
@@ -42,7 +42,7 @@ USE_WIDECHAR_API  = 0
 PRJ_OBJS = \
 	$(TMP_DIR)\tdbc.obj \
 	$(TMP_DIR)\tdbcStubInit.obj \
-	$(TMP_DIR)\tdbcTokenize.obj 
+	$(TMP_DIR)\tdbcTokenize.obj
 
 PRJ_STUBOBJS = \
 	$(TMP_DIR)\tdbcStubLib.obj

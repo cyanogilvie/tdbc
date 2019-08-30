@@ -23,8 +23,8 @@ set ::CSSFILE "docs.css"
 
 set ::logo {
     <a href="http://sourceforge.net/projects/tcl">
-    <img src="http://sflogo.sourceforge.net/sflogo.php?group_id=10894&amp;type=14" 
-         width="150" height="40" 
+    <img src="http://sflogo.sourceforge.net/sflogo.php?group_id=10894&amp;type=14"
+         width="150" height="40"
          alt="Get Tcl at SourceForge.net. Fast, secure and Free Open Source software downloads" />
     </a>
 }
@@ -1541,7 +1541,7 @@ proc output-directive {line} {
 }
 ##
 ## merge copyright listings
-## 
+##
 proc merge-copyrights {l1 l2} {
     set merge {}
     set re1 {^Copyright +(?:\(c\)|\\\(co|&copy;) +(\w.*?)(?:all rights reserved)?(?:\. )*$}
@@ -2110,7 +2110,7 @@ set tdbcsqlite3desc {The Sqlite3 driver for Tcl DataBase Connectivity (TDBC)}
 set tdbcmysqldesc {The MySQL driver for Tcl DataBase Connectivity (TDBC)}
 set tdbcpostgresdesc {The Postgres driver for Tcl DataBase Connectivity (TDBC)}
 
-    
+
 if {[catch {
     make-man-pages $webdir \
 	[expr {($build_tcl || $build_tk) ? "$tcltkdir/{$appdir}/doc/*.1 \"$tcltkdesc Applications\" UserCmd {$usercmddesc}" : ""}] \
