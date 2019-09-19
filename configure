@@ -3689,7 +3689,7 @@ fi
   fi
 fi
 # Announce what versions of Tcl (and TclOO) are needed
-TCL_VERSION_REQ=8.5;
+TCL_VERSION_REQ=8.5-;
 TCL_VERSION_DESIRED=8.6;
 TCLOO_VERSION_REQ=0.6;
 

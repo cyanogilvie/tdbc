@@ -18,10 +18,6 @@
 
 PROJECT         = tdbc
 RCFILE      = tdbc.rc
-# Tcl 8.6 etc. compile with /DUNICODE. TDBC pre-nmake reform compiled
-# without -DUNICODE using explicit W suffixes on wide character calls.
-# Keep that behaviour for now.
-USE_WIDECHAR_API  = 0
 
 !include "rules-ext.vc"
 
