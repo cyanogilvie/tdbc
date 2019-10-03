@@ -19,7 +19,7 @@ dnl	to configure the system for the local environment.
 # so that we create the export library with the dll.
 #-----------------------------------------------------------------------
 
-AC_INIT([tdbc], [1.1.0])
+AC_INIT([tdbc], [1.1.1])
 
 #--------------------------------------------------------------------
 # Call TEA_INIT as the first TEA_ macro to set up initial vars.
@@ -69,7 +69,7 @@ fi
 # Announce what versions of Tcl (and TclOO) are needed
 TCL_VERSION_REQ=8.5-; AC_SUBST(TCL_VERSION_REQ)
 TCL_VERSION_DESIRED=8.6; AC_SUBST(TCL_VERSION_DESIRED)
-TCLOO_VERSION_REQ=0.6; AC_SUBST(TCLOO_VERSION_REQ)
+TCLOO_VERSION_REQ=1.0; AC_SUBST(TCLOO_VERSION_REQ)
 
 #-----------------------------------------------------------------------
 # Handle the --prefix=... option by defaulting to what Tcl gave.
