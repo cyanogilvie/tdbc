@@ -87,8 +87,306 @@ proc tdbc::ParseConvenienceArgs {argv optsVar} {
     return [lrange $argv[set argv {}] $i end]
     
 }
+
+#------------------------------------------------------------------------------
+#
+# tdbc::_poolInit --
+#
+#	Initialize the connection pool machinery
+#
+# Results:
+#	None
+#
+# Side effects:
+#	Creates ::tdbc::pool, ::tdbc::poolDestroy and starts a thread
+#	to manage the background tasks associated with the connection pools.
+#
+#------------------------------------------------------------------------------
 
+proc ::tdbc::_poolInit {} {
+    if {[catch {package require Thread}]} {
+	# If threads aren't available, fall back to unpooled connections.
+	# TODO: provide a single interp implementation using a namespace
+	# variable?  How would detached connection grooming work reliably
+	# without assuming the event loop is running?
 
+	proc ::tdbc::pool {driver constructor args} {
+	    try {
+		uplevel 1 [list tdbc::${driver}::connection $constructor {*}$args]
+	    } on ok connobj {
+		oo::objdefine $connobj method release {} {
+		    foreach resultset [my resultsets] { $resultset destroy }
+		    foreach statement [my statements] { $statement destroy }
+		    my destroy
+		}
+		set connobj
+	    }
+	}
+
+	proc ::tdbc::poolDestroy {driver args} {}
+    } else {
+	# Retrieve a connection from the pool for $driver {*}$args
+	# If a detached connection wasn't found in the pool, create
+	# a fresh one.  If the pool is empty after retrieving a
+	# connection, add a connection to the pool in a background thread.
+	# Call the release method on the returned connection to
+	# release it back to the pool.
+	# Handles are issued from the pool in reverse order of which
+	# they were added - that is: the most recently released handle
+	# will be the next returned.  This is done to allow the pool
+	# size to shrink back down to match requirements after a spike
+	# in requirements (older handles will remain in the pool until
+	# they time out)
+
+	proc ::tdbc::pool {driver constructor args} {
+	    switch -- $constructor {
+		new {}
+
+		create {
+		    set args	[lassign $args cmdname]
+		    lappend constructor	$cmdname
+		}
+
+		default {
+		    error "constructor must be new or create"
+		}
+	    }
+
+	    set pool	[list $driver {*}$args]
+
+	    tsv::lock tdbcPools {
+		if {![tsv::exists tdbcPools $pool]} {
+		    tsv::set tdbcPools $pool {}
+		}
+	    }
+
+	    package require tdbc::$driver
+
+	    while 1 {
+		lassign [tsv::lpop tdbcPools $pool] handle lastUsed
+		if {$handle eq ""} break	;# Ran out of detached handles
+
+		try {
+		    uplevel 1 [list tdbc::${driver}::connection {*}$constructor -attach $handle]
+		} on ok connobj {
+		    #if {![$connobj connected]} {
+		    #    $connobj destroy
+		    #    continue
+		    #}
+		    break
+		} on error {errmsg options} {
+		    #puts "[thread::id] Error attaching to detached handle $handle [dict get $options -errorcode]: [dict get $options -errorinfo]"
+		    continue
+		}
+	    }
+
+	    if {![info exists connobj]} {
+		# No detached handles in the pool, open a new one
+		set connobj	[uplevel 1 [list tdbc::${driver}::connection {*}$constructor {*}$args]]
+	    }
+	    try {
+		# Provide a release method that puts this connection
+		# back into the pool.  Calls the detach method, so
+		# the side effects include destroying this instance.
+		# TODO: fiddle with the destructor to do this automagically?
+
+		oo::objdefine $connobj method release {} [string map [list %pool% [list $pool]] {
+		    # Result sets and statements hold references to this
+		    # connection, and so need to go before we can detach.
+		    # TODO: somehow defer the detach until the last reference goes
+		    # away?
+
+		    foreach resultset [my resultsets] { $resultset destroy }
+		    foreach statement [my statements] { $statement destroy }
+
+		    # Ensure we aren't returning a connection to the pool that
+		    # is in an open transaction.
+		    # TODO: is there a reliable way to know if a transaction
+		    # is open?
+		    catch {my rollback}
+
+		    tsv::lpush tdbcPools %pool% [list [my detach] [clock microseconds]]
+		}]
+	    } on error {errmsg options} {
+		if {[info exists connobj] && [info object isa object $connobj]} {
+		    $connobj destroy
+		}
+		return -options $options $errmsg
+	    }
+
+	    if {[tsv::llength tdbcPools $pool] == 0} {
+		# Connection pool is empty, kick off a connection attempt in
+		# the background to prime the pool for the next request
+		tdbc::_threadsend [tsv::get tdbcThreads poolWorker] [list prime $pool]
+	    }
+
+	    set connobj
+	}
+
+	proc ::tdbc::poolDestroy {driver args} {
+	    set pool	[list $driver {*}$args]
+	    foreach detachedhandle [tsv::pop tdbcPools $pool] {
+		lassign $detachedhandle handle lastUsed
+		try {
+		    tdbc::${driver}::connection new -attach $handle
+		} on ok obj {
+		    $obj destroy
+		} on error {errmsg options} {}
+	    }
+	}
+
+	# ::tdbc::_prevent_native_thread_send - allow the test suite to force the
+	# use of the polyfill version.
+
+	if {
+	    ![info exists ::tdbc::_prevent_native_thread_send] &&
+	    [info commands ns_thread] eq ""
+	} {
+	    #puts "Using thread::send native"
+	    proc ::tdbc::_makethread script          {thread::create -preserved "$script\nthread::wait"}
+	    proc ::tdbc::_threadsend {thread script} {thread::send -async $thread $script}
+	    proc ::tdbc::_threadrelease thread       {thread::release $thread}
+	} else {
+	    # Naviserver lacks thread::send capability, polyfill with chan pipe
+	    #puts "Using thread::send polyfill with chan pipe"
+
+	    proc ::tdbc::_makethread script {
+		lassign [chan pipe] read write
+		chan configure $write -buffering full -encoding utf-8 -translation lf -eofchar {} -blocking 0
+		chan configure $read  -buffering none -encoding utf-8 -translation lf -eofchar {} -blocking 1
+		thread::detach $read
+		thread::detach $write
+
+		# Need to test again because the test suite triggers
+		# this path even when not on NaviServer.
+
+		if {[info commands ns_thread] eq ""} {
+		    set startThread	{thread::create -preserved}
+		} else {
+		    set startThread	{ns_thread begindetached}
+		}
+
+		{*}$startThread [string map [list %chan% [list $read] %script% $script] {
+		    %script%
+
+		    proc release {} {
+			set ::exit 0
+		    }
+
+		    proc readable chan {
+			set len	[gets $chan]
+			if {[eof $chan]} {
+			    # Lost our control channel
+			    set ::exit 1
+			    return
+			}
+
+			# Isolate the control channel from the effects of $script
+			after idle [read $chan $len]
+		    }
+
+		    set chan	%chan%
+		    thread::attach $chan
+		    chan event $chan readable [list readable $chan]
+
+		    vwait ::exit
+		}]
+
+		# For these threads, the handle is the write end of the chan pipe
+		set write
+	    }
+
+	    proc ::tdbc::_threadsend {thread script} {
+		tsv::lock tdbcThreads {
+		    thread::attach $thread
+		    try {
+			puts -nonewline $thread [string length $script]\n$script
+			flush $thread
+		    } finally {
+			thread::detach $thread
+		    }
+		}
+	    }
+
+	    proc ::tdbc::_threadrelease thread {::tdbc::_threadsend $thread release}
+	}
+
+	tsv::lock tdbcThreads {
+	    if {![tsv::exists tdbcThreads poolWorker]} {
+		tsv::set tdbcThreads poolWorker [tdbc::_makethread {
+		    # Every 20 seconds, run through the detached handles and remove
+		    # those that aren't connected, or have been idle longer than
+		    # two minutes.
+
+		    proc groomDetached {{timeout 120}} {
+			global groom_afterid
+			after cancel $groom_afterid; set groom_afterid	""
+
+			try {
+			    foreach pool [tsv::array names tdbcPools] {
+				set driver	[lindex $pool 0]
+				package require tdbc::$driver
+				# microseconds mainly so that we can use
+				# tighter timing in the test suite.
+				set now		[clock microseconds]
+				tsv::lock tdbcPools {
+				    set detachedhandles	[tsv::get tdbcPools $pool]
+				    tsv::set tdbcPools $pool {}
+				}
+				foreach detachedhandle $detachedhandles {
+				    lassign $detachedhandle handle lastUsed
+				    try {
+					tdbc::${driver}::connection new -attach $handle
+				    } on ok obj {
+					if {($now - $lastUsed) / 1e6 > $timeout || ![$obj connected]} {
+					    $obj destroy
+					    continue
+					}
+
+					# Still valid - put it back
+					tsv::lappend tdbcPools $pool [list [$obj detach] $lastUsed]
+				    } on error {errmsg options} {
+					# TODO: what to do here?  We will leak $handle
+					# if we silently ignore this, but the
+					# alternative seems worse.
+				    }
+				}
+
+				if {[tsv::llength tdbcPools $pool] == 0} {
+				    prime $pool
+				}
+			    }
+			} finally {
+			    set groom_afterid	[after 20000 groomDetached]
+			}
+		    }
+
+		    # Ensure there is at least one detached handle in $pool.
+
+		    proc prime pool {
+			global prime_busy
+			if {[info exists prime_busy]} return
+			set prime_busy	1
+			try {
+			    if {[tsv::llength tdbcPools $pool] > 0} return
+
+			    set args	[lassign $pool driver]
+			    package require tdbc::$driver
+			    set connobj	[tdbc::${driver}::connection new {*}$args]
+			    tsv::lappend tdbcPools $pool [list [$connobj detach] [clock microseconds]]
+			} finally {
+			    unset -nocomplain prime_busy
+			}
+		    }
+
+		    set ::groom_afterid	[after 20000 groomDetached]
+		}]
+	    }
+	}
+    }
+}
+
+tdbc::_poolInit
 
 #------------------------------------------------------------------------------
 #
@@ -482,6 +780,20 @@ oo::class create ::tdbc::connection {
 		      [dict exists $argdict primary] \
 		      [dict exists $argdict foreign]]
 	tailcall $stmt allrows $argdict
+    }
+
+    # The default detach method for derived classes that don't support
+    # it is just destroy
+
+    method detach {} {
+	my destroy
+    }
+
+    # The default connected method for derived classes that don't
+    # support it is blind optimism
+
+    method connected {} {
+	return 1
     }
 
     # Derived classes are expected to implement the 'begintransaction',

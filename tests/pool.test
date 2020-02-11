@@ -1,0 +1,432 @@
+# pool.test --
+#
+#	Tests for connection pool handling in TDBC
+#
+# Copyright (c) 2020 by Cyan Ogilvie.
+#
+# $Id: $
+
+
+package require tcltest 2
+namespace import -force ::tcltest::*
+tcltest::loadTestedCommands
+package require tdbc
+
+
+if {[info exists ::env(TDBC_TEST_DRIVER)] && [info exists ::env(TDBC_TEST_CONNECTION)]} {
+    tcltest::testConstraint connect 1
+} else {
+    tcltest::testConstraint connect 0
+}
+
+#------------------------------------------------------------------------------
+#
+# The tests that follow all require a connection to a database.
+
+if {![tcltest::testConstraint connect]} {
+    puts "tests requiring a db connection skipped."
+    cleanupTests
+    return
+}
+
+package require tdbc::$::env(TDBC_TEST_DRIVER)
+
+#------------------------------------------------------------------------------
+#
+# Test helpers
+
+proc test_env {name thread_send_mode} {
+    upvar 1 testname testname  pool pool
+
+    package require Thread
+
+    set testname	$name
+    set pool		[list $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)]
+
+    switch -- $thread_send_mode {
+	native   { unset -nocomplain ::tdbc::_prevent_native_thread_send }
+	polyfill { set ::tdbc::_prevent_native_thread_send 1 }
+	default  { error "Invalid thread_send_mode: \"$thread_send_mode\"" }
+    }
+
+    if {[tsv::exists tdbcThreads poolWorker]} {
+	# Tear down the existing pool state so that we can control the conditions of this test
+	if {[tsv::exists tdbcPools $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)]} {
+	    tdbc::poolDestroy $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)
+	}
+	tdbc::_threadrelease [tsv::pop tdbcThreads poolWorker]
+	tdbc::_poolInit
+    }
+}
+
+
+proc onecolumn {db sql} {lindex [uplevel 1 [list $db allrows -as lists $sql]] 0 0}
+proc exists    {db sql} {tailcall onecolumn $db "select exists($sql)"}
+
+
+proc has_session_table db {
+    onecolumn $db {
+	select exists (
+	    select * from information_schema.tables where table_name = 'tdbc_session'
+	)
+    }
+}
+
+
+proc make_session_table db {
+    $db allrows {
+	create temporary table tdbc_session (
+	    k	varchar(100),
+	    v	varchar(100),
+	    primary key (k)
+	)
+    }
+}
+
+
+proc get_connection db {
+    dict set ::_session_handles $db 1
+    tailcall tdbc::pool $::env(TDBC_TEST_DRIVER) create $db {*}$::env(TDBC_TEST_CONNECTION)
+}
+
+
+proc cleanup args {
+    global _session_handles
+
+    if {[info exists _session_handles]} {
+	foreach db [dict keys $_session_handles] {
+	    if {[info object isa object $db]} {
+		$db destroy
+	    }
+	}
+	unset _session_handles
+    }
+
+    uplevel 1 [list unset -nocomplain {*}$args ::tdbc::_prevent_native_thread_send testname pool]
+
+    tdbc::poolDestroy $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)
+}
+
+
+proc session_key {db args} {
+    upvar 1 testname testname
+    switch [llength $args] {
+	0 {
+	    if {[has_session_table $db]} {
+		onecolumn $db {select v from tdbc_session where k=:testname}
+	    }
+	}
+
+	1 {
+	    set newval	[lindex $args 0]
+
+	    if {![has_session_table $db]} {make_session_table $db}
+
+	    if {[exists $db {select * from tdbc_session where k = :testname}]} {
+		$db allrows {update tdbc_session set v = :newval where k = :testname}
+	    } else {
+		$db allrows {insert into tdbc_session (k, v) values (:testname, :newval)}
+	    }
+
+	    set newval
+	}
+
+	default { error "Wrong # args: should be session db k ?newValue?" }
+    }
+}
+
+
+proc describe_pool {detachedhandles {rel {}}} {
+    lmap e $detachedhandles {
+	lassign $e handle lastUsed
+	if {$rel eq ""} {
+	    set lastUsed
+	} else {
+	    format {%.6f} [expr {($rel - $lastUsed) / 1e6}]
+	}
+    }
+}
+
+
+#------------------------------------------------------------------------------
+#
+# Tests
+
+test pool-1.0 {Test connection to the database} {*}{
+    -body {
+	tdbc::$::env(TDBC_TEST_DRIVER)::connection create db {*}$::env(TDBC_TEST_CONNECTION)
+	onecolumn db {select 'connected'}
+    }
+    -cleanup {
+	if {[info object isa object db]} {
+	    db destroy
+	}
+    }
+    -result connected
+}
+
+foreach mode {native polyfill} {
+    test pool-1.1-$mode "Connection pool handling: $mode thread::send" -setup [list test_env pool-1.1-$mode $mode] {*}{
+	-body {
+	    set res	{}
+	    get_connection db1
+	    get_connection db2
+	    lappend res [info object isa object db1]
+	    session_key db1 a
+	    session_key db2 b
+	    lappend res [session_key db1]
+	    lappend res [session_key db2]
+	    db2 release
+	    db1 release
+	    lappend res [info object isa object db1]
+	    get_connection db1
+	    lappend res [info object isa object db1]
+	    lappend res [session_key db1]
+	    set res
+	}
+	-cleanup {cleanup res}
+	-result {1 a b 0 1 a}
+    }
+
+    test pool-1.2-$mode "Connect from multiple threads: $mode thread::send" -setup [list test_env pool-1.2-$mode $mode] {*}{
+	-body {
+	    set res	{}
+	    get_connection db1
+	    lappend res [info object isa object db1]
+	    get_connection db2
+	    session_key db1 a
+	    session_key db2 b
+	    lappend res [session_key db1]
+	    lappend res [session_key db2]
+	    db2 release
+	    db1 release
+	    lappend res [info object isa object db1]
+
+	    set tid	[thread::create -preserved]
+	    lappend res {*}[thread::send $tid [string map [list %testname% [list $testname]] {
+		set testname	%testname%
+		package require tdbc
+		set res	{}
+		tdbc::pool $::env(TDBC_TEST_DRIVER) create db {*}$::env(TDBC_TEST_CONNECTION)
+		lappend res [lindex [db allrows -as lists {select v from tdbc_session where k=:testname}] 0 0]
+		db release
+		lappend res [info object isa object db]
+		set res
+	    }]]
+	    thread::release $tid
+
+	    lappend res [thread::exists $tid]
+	    set res
+	}
+	-cleanup {
+	    if {[thread::exists $tid]} {thread::release $tid}
+	    cleanup res threadres tid
+	}
+	-result {1 a b 0 a 0 0}
+    }
+
+    test pool-1.3-$mode "groomDetached, $mode thread::send, all still valid" -setup [list test_env pool-1.3-$mode $mode] {*}{
+	-body {
+	    set res	{}
+	    get_connection db1
+	    get_connection db2
+	    session_key db1 a
+	    session_key db2 b
+	    lappend res [session_key db1]
+	    lappend res [session_key db2]
+	    db1 release
+	    db2 release
+	    after 50				;# Allow time for the primed handle to enter the pool
+	    set before	[tsv::get tdbcPools $pool]
+	    lappend res [llength $before]	;# Expecting 3: the two released handles plus a primed one
+	    tdbc::_threadsend [tsv::get tdbcThreads poolWorker] groomDetached
+	    after 50				;# Wait for groomDetached to finish
+	    set after	[tsv::get tdbcPools $pool]
+	    set now	[clock microseconds]
+	    lappend res	[expr {
+		[describe_pool $before]  eq  [describe_pool $after]
+			? "matches"
+			: "\nbefore: ([describe_pool $before $now])\n after: ([describe_pool $after $now])\n"
+	    }]
+	    get_connection db1
+	    get_connection db2
+	    lappend res [session_key db1]
+	    lappend res [session_key db2]
+	    db1 release
+	    db2 release
+	    set res
+	}
+	-cleanup {cleanup res testname before after now}
+	-result {a b 3 matches b a}
+    }
+
+    test pool-1.4-$mode "groomDetached, $mode thread::send, one expired" -setup [list test_env pool-1.4-$mode $mode] {*}{
+	-body {
+	    set res	{}
+	    get_connection db1
+	    get_connection db2
+	    get_connection db3
+	    session_key db1 a
+	    session_key db2 b
+	    session_key db3 c
+	    lappend res [session_key db1]
+	    lappend res [session_key db2]
+	    lappend res [session_key db3]
+	    db2 release
+	    after 200
+	    db1 release
+	    db3 release
+	    set before	[tsv::get tdbcPools $pool]
+	    lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
+	    tdbc::_threadsend [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# "b" handle should be expired
+	    after 50				;# Wait for groomDetached to finish
+	    set after	[tsv::get tdbcPools $pool]
+	    lappend res [llength $after]	;# Expecting 2: db2 plus the primed handles should have expired
+	    set now		[clock microseconds]
+	    lappend res [expr {
+		[lrange [describe_pool $before] 0 end-2]  eq  [describe_pool $after]
+		    ? "trimmed"
+		    : "\nunexpected:\n\tbefore: ([describe_pool $before $now]),\n\tafter:  ([describe_pool $after $now])\n"
+	    }]
+	    get_connection db3
+	    get_connection db1
+	    get_connection db2
+	    lappend res [session_key db1]	;# Should be the original db1 connection
+	    lappend res [session_key db2]	;# Should be a new connection
+	    lappend res [session_key db3]	;# Should be the original db3 connection
+	    db1 release
+	    db2 release
+	    db3 release
+	    set res
+	}
+	-cleanup {cleanup res before after pool now}
+	-result {a b c 4 2 trimmed a {} c}
+    }
+
+    test pool-1.5-$mode "groomDetached, $mode thread::send, all expired" -setup [list test_env pool-1.5-$mode $mode] {*}{
+	-body {
+	    set res	{}
+	    get_connection db1
+	    get_connection db2
+	    get_connection db3
+	    session_key db1 a
+	    session_key db2 b
+	    session_key db3 c
+	    lappend res [session_key db1]
+	    lappend res [session_key db2]
+	    lappend res [session_key db3]
+	    db1 release
+	    db2 release
+	    db3 release
+	    after 200
+	    set before	[tsv::get tdbcPools $pool]
+	    lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
+	    tdbc::_threadsend [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# all handles should be expired
+	    after 50				;# Wait for groomDetached to finish
+	    set after	[tsv::get tdbcPools $pool]
+	    lappend res [llength $after]	;# Expecting 1: only a new, primed handle should remain
+	    get_connection db1
+	    lappend res [session_key db1]
+	    db1 release
+	    set res
+	}
+	-cleanup {cleanup res before after}
+	-result {a b c 4 1 {}}
+    }
+}
+
+test pool-2.1 {Force transaction rollback on release} {*}{
+    -setup {test_env pool-2.1 native}
+    -body {
+	set res	{}
+	get_connection db1
+	session_key db1 a
+	lappend res [session_key db1]
+	db1 begintransaction
+	session_key db1 b
+	lappend res [session_key db1]
+	db1 release
+	get_connection db1
+	lappend res [session_key db1]
+	db1 release
+	set res
+    }
+    -cleanup {cleanup res}
+    -result {a b a}
+}
+
+test pool-3.1 {Force statement destruction on release} {*}{
+    -setup {test_env pool-2.1 native}
+    -body {
+	set res	{}
+	get_connection db1
+	make_session_table db1
+	set statement	[db1 prepare {
+	    select v from tdbc_session where k=:testname
+	}]
+	lappend res	[info object isa object $statement]
+	set statements	[db1 statements]
+	lappend res	[lmap e $statements {info object isa object $e}]
+	db1 release
+	lappend res	[info object isa object $statement]
+	lappend res	[lmap e $statements {info object isa object $e}]
+	set res
+    }
+    -cleanup {cleanup res statements statement}
+    -result {1 1 0 0}
+}
+
+test pool-4.1 {Force result set destruction on release} {*}{
+    -setup {test_env pool-2.1 native}
+    -body {
+	set res	{}
+	get_connection db1
+	make_session_table db1
+	set statement	[db1 prepare {
+	    select v from tdbc_session where k=:testname
+	}]
+	set resultset	[$statement execute]
+	$statement execute
+	lappend res	[info object isa object $resultset]
+	set resultsets	[db1 resultsets]
+	lappend res	[lmap e $resultsets {info object isa object $e}]
+	db1 release
+	lappend res	[info object isa object $resultset]
+	lappend res	[lmap e $resultsets {info object isa object $e}]
+	set res
+    }
+    -cleanup {cleanup res resultsets resultset statement}
+    -result {1 {1 1} 0 {0 0}}
+}
+
+test pool-10.1 {Timing: below 1 ms and less than 70 % of a new connection} {*}{
+    -setup {test_env pool-10.1 native}
+    -body {
+	set nopool_usec [lindex [time {
+	    tdbc::$::env(TDBC_TEST_DRIVER)::connection create db_$testname {*}$::env(TDBC_TEST_CONNECTION)
+	    db_$testname destroy
+	} 100] 0 0]
+
+	tdbc::pool $::env(TDBC_TEST_DRIVER) create db_$testname {*}$::env(TDBC_TEST_CONNECTION)
+	set usec	[lindex [time {
+	    db_$testname release
+	    tdbc::pool $::env(TDBC_TEST_DRIVER) create db_$testname {*}$::env(TDBC_TEST_CONNECTION)
+	} 1000] 0]
+	list [expr {$usec < 1000 ? "ok" : "too slow: $usec"}] [expr {$usec < $nopool_usec * .7 ? "ok" : "too slow relative to nopool: $usec vs $nopool_usec"}]
+    }
+    -cleanup {
+	if {[info object isa object db_$testname]} {
+	    db_$testname destroy
+	}
+	cleanup usec nopool_usec
+    }
+    -result {ok ok}
+}
+
+
+cleanupTests
+return
+
+# Local Variables:
+# mode: tcl
+# End:
