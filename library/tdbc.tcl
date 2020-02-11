@@ -205,7 +205,11 @@ proc ::tdbc::_poolInit {} {
 		    # is open?
 		    catch {my rollback}
 
-		    tsv::lpush tdbcPools %pool% [list [my detach] [clock microseconds]]
+		    set handle	[my detach]
+
+		    if {$handle ne ""} {
+			tsv::lpush tdbcPools %pool% [list $handle [clock microseconds]]
+		    }
 		}]
 	    } on error {errmsg options} {
 		if {[info exists connobj] && [info object isa object $connobj]} {
@@ -373,7 +377,10 @@ proc ::tdbc::_poolInit {} {
 			    set args	[lassign $pool driver]
 			    package require tdbc::$driver
 			    set connobj	[tdbc::${driver}::connection new {*}$args]
-			    tsv::lappend tdbcPools $pool [list [$connobj detach] [clock microseconds]]
+			    set handle	[$connobj detach]
+			    if {$handle ne ""} {
+				tsv::lappend tdbcPools $pool [list $handle [clock microseconds]]
+			    }
 			} finally {
 			    unset -nocomplain prime_busy
 			}

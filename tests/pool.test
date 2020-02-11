@@ -65,10 +65,12 @@ proc exists    {db sql} {tailcall onecolumn $db "select exists($sql)"}
 
 
 proc has_session_table db {
-    onecolumn $db {
-	select exists (
-	    select * from information_schema.tables where table_name = 'tdbc_session'
-	)
+    try {
+	exists $db {select * from tdbc_session}
+    } on error {} {
+	return 0
+    } on ok {} {
+	return 1
     }
 }
 
