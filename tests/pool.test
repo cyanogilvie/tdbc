@@ -31,11 +31,18 @@ if {![tcltest::testConstraint connect]} {
 
 package require tdbc::$::env(TDBC_TEST_DRIVER)
 
+if {[info exists ::env(TDBC_TEST_THREADPLUGIN)]} {
+    set ::threadPlugin	$::env(TDBC_TEST_THREADPLUGIN)
+} else {
+    set ::threadPlugin	tdbc::thread
+}
+tdbc::PoolInit $::threadPlugin
+
 #------------------------------------------------------------------------------
 #
 # Test helpers
 
-proc test_env {name thread_send_mode} {
+proc test_env name {
     upvar 1 testname testname  pool pool
 
     package require Thread
@@ -43,19 +50,11 @@ proc test_env {name thread_send_mode} {
     set testname	$name
     set pool		[list $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)]
 
-    switch -- $thread_send_mode {
-	native   { unset -nocomplain ::tdbc::_prevent_native_thread_send }
-	polyfill { set ::tdbc::_prevent_native_thread_send 1 }
-	default  { error "Invalid thread_send_mode: \"$thread_send_mode\"" }
-    }
-
     if {[tsv::exists tdbcThreads poolWorker]} {
 	# Tear down the existing pool state so that we can control the conditions of this test
 	if {[tsv::exists tdbcPools $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)]} {
 	    tdbc::poolDestroy $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)
 	}
-	tdbc::_threadrelease [tsv::pop tdbcThreads poolWorker]
-	tdbc::_poolInit
     }
 }
 
@@ -104,7 +103,7 @@ proc cleanup args {
 	unset _session_handles
     }
 
-    uplevel 1 [list unset -nocomplain {*}$args ::tdbc::_prevent_native_thread_send testname pool]
+    uplevel 1 [list unset -nocomplain {*}$args testname pool]
 
     tdbc::poolDestroy $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)
 }
@@ -167,178 +166,177 @@ test pool-1.0 {Test connection to the database} {*}{
     -result connected
 }
 
-foreach mode {native polyfill} {
-    test pool-1.1-$mode "Connection pool handling: $mode thread::send" -setup [list test_env pool-1.1-$mode $mode] {*}{
-	-body {
-	    set res	{}
-	    get_connection db1
-	    get_connection db2
-	    lappend res [info object isa object db1]
-	    session_key db1 a
-	    session_key db2 b
-	    lappend res [session_key db1]
-	    lappend res [session_key db2]
-	    db2 release
-	    db1 release
-	    lappend res [info object isa object db1]
-	    get_connection db1
-	    lappend res [info object isa object db1]
-	    lappend res [session_key db1]
-	    set res
-	}
-	-cleanup {cleanup res}
-	-result {1 a b 0 1 a}
+test pool-1.1 {Connection pool handling} -setup {test_env pool-1.1} {*}{
+    -body {
+	set res	{}
+	get_connection db1
+	get_connection db2
+	lappend res [info object isa object db1]
+	session_key db1 a
+	session_key db2 b
+	lappend res [session_key db1]
+	lappend res [session_key db2]
+	db2 destroy
+	rename db1 {}
+	lappend res [info object isa object db1]
+	get_connection db1
+	lappend res [info object isa object db1]
+	lappend res [session_key db1]
+	set res
     }
+    -cleanup {cleanup res}
+    -result {1 a b 0 1 a}
+}
 
-    test pool-1.2-$mode "Connect from multiple threads: $mode thread::send" -setup [list test_env pool-1.2-$mode $mode] {*}{
-	-body {
+test pool-1.2 {Connect from multiple threads} -setup {test_env pool-1.2} {*}{
+    -body {
+	set res	{}
+	get_connection db1
+	lappend res [info object isa object db1]
+	get_connection db2
+	session_key db1 a
+	session_key db2 b
+	lappend res [session_key db1]
+	lappend res [session_key db2]
+	db2 destroy
+	db1 close
+	lappend res [info object isa object db1]
+
+	set tid	[thread::create -preserved]
+	lappend res {*}[thread::send $tid [string map [list %testname% [list $testname] %threadPlugin% [list $threadPlugin]] {
+	    set testname	%testname%
+	    package require tdbc
+	    tdbc::PoolInit %threadPlugin%
 	    set res	{}
-	    get_connection db1
-	    lappend res [info object isa object db1]
-	    get_connection db2
-	    session_key db1 a
-	    session_key db2 b
-	    lappend res [session_key db1]
-	    lappend res [session_key db2]
-	    db2 release
-	    db1 release
-	    lappend res [info object isa object db1]
-
-	    set tid	[thread::create -preserved]
-	    lappend res {*}[thread::send $tid [string map [list %testname% [list $testname]] {
-		set testname	%testname%
-		package require tdbc
-		set res	{}
-		tdbc::pool $::env(TDBC_TEST_DRIVER) create db {*}$::env(TDBC_TEST_CONNECTION)
-		lappend res [lindex [db allrows -as lists {select v from tdbc_session where k=:testname}] 0 0]
-		db release
-		lappend res [info object isa object db]
-		set res
-	    }]]
-	    thread::release $tid
-
-	    lappend res [thread::exists $tid]
+	    tdbc::pool $::env(TDBC_TEST_DRIVER) create db {*}$::env(TDBC_TEST_CONNECTION)
+	    lappend res [lindex [db allrows -as lists {select v from tdbc_session where k=:testname}] 0 0]
+	    db close
+	    lappend res [info object isa object db]
 	    set res
-	}
-	-cleanup {
-	    if {[thread::exists $tid]} {thread::release $tid}
-	    cleanup res threadres tid
-	}
-	-result {1 a b 0 a 0 0}
-    }
+	}]]
+	thread::release $tid
 
-    test pool-1.3-$mode "groomDetached, $mode thread::send, all still valid" -setup [list test_env pool-1.3-$mode $mode] {*}{
-	-body {
-	    set res	{}
-	    get_connection db1
-	    get_connection db2
-	    session_key db1 a
-	    session_key db2 b
-	    lappend res [session_key db1]
-	    lappend res [session_key db2]
-	    db1 release
-	    db2 release
-	    after 50				;# Allow time for the primed handle to enter the pool
-	    set before	[tsv::get tdbcPools $pool]
-	    lappend res [llength $before]	;# Expecting 3: the two released handles plus a primed one
-	    tdbc::_threadsend [tsv::get tdbcThreads poolWorker] groomDetached
-	    after 50				;# Wait for groomDetached to finish
-	    set after	[tsv::get tdbcPools $pool]
-	    set now	[clock microseconds]
-	    lappend res	[expr {
-		[describe_pool $before]  eq  [describe_pool $after]
-			? "matches"
-			: "\nbefore: ([describe_pool $before $now])\n after: ([describe_pool $after $now])\n"
-	    }]
-	    get_connection db1
-	    get_connection db2
-	    lappend res [session_key db1]
-	    lappend res [session_key db2]
-	    db1 release
-	    db2 release
-	    set res
-	}
-	-cleanup {cleanup res testname before after now}
-	-result {a b 3 matches b a}
+	lappend res [thread::exists $tid]
+	set res
     }
+    -cleanup {
+	if {[thread::exists $tid]} {thread::release $tid}
+	cleanup res threadres tid
+    }
+    -result {1 a b 0 a 0 0}
+}
 
-    test pool-1.4-$mode "groomDetached, $mode thread::send, one expired" -setup [list test_env pool-1.4-$mode $mode] {*}{
-	-body {
-	    set res	{}
-	    get_connection db1
-	    get_connection db2
-	    get_connection db3
-	    session_key db1 a
-	    session_key db2 b
-	    session_key db3 c
-	    lappend res [session_key db1]
-	    lappend res [session_key db2]
-	    lappend res [session_key db3]
-	    db2 release
-	    after 200
-	    db1 release
-	    db3 release
-	    set before	[tsv::get tdbcPools $pool]
-	    lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
-	    tdbc::_threadsend [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# "b" handle should be expired
-	    after 50				;# Wait for groomDetached to finish
-	    set after	[tsv::get tdbcPools $pool]
-	    lappend res [llength $after]	;# Expecting 2: db2 plus the primed handles should have expired
-	    set now		[clock microseconds]
-	    lappend res [expr {
-		[lrange [describe_pool $before] 0 end-2]  eq  [describe_pool $after]
-		    ? "trimmed"
-		    : "\nunexpected:\n\tbefore: ([describe_pool $before $now]),\n\tafter:  ([describe_pool $after $now])\n"
-	    }]
-	    get_connection db3
-	    get_connection db1
-	    get_connection db2
-	    lappend res [session_key db1]	;# Should be the original db1 connection
-	    lappend res [session_key db2]	;# Should be a new connection
-	    lappend res [session_key db3]	;# Should be the original db3 connection
-	    db1 release
-	    db2 release
-	    db3 release
-	    set res
-	}
-	-cleanup {cleanup res before after pool now}
-	-result {a b c 4 2 trimmed a {} c}
+test pool-1.3 {groomDetached, all still valid} -setup {test_env pool-1.3} {*}{
+    -body {
+	set res	{}
+	get_connection db1
+	get_connection db2
+	session_key db1 a
+	session_key db2 b
+	lappend res [session_key db1]
+	lappend res [session_key db2]
+	db1 close
+	db2 close
+	after 50				;# Allow time for the primed handle to enter the pool
+	set before	[tsv::get tdbcPools $pool]
+	lappend res [llength $before]	;# Expecting 3: the two released handles plus a primed one
+	$::threadPlugin send [tsv::get tdbcThreads poolWorker] groomDetached
+	after 50				;# Wait for groomDetached to finish
+	set after	[tsv::get tdbcPools $pool]
+	set now	[clock microseconds]
+	lappend res	[expr {
+	    [describe_pool $before]  eq  [describe_pool $after]
+		    ? "matches"
+		    : "\nbefore: ([describe_pool $before $now])\n after: ([describe_pool $after $now])\n"
+	}]
+	get_connection db1
+	get_connection db2
+	lappend res [session_key db1]
+	lappend res [session_key db2]
+	db1 close
+	db2 close
+	set res
     }
+    -cleanup {cleanup res testname before after now}
+    -result {a b 3 matches b a}
+}
 
-    test pool-1.5-$mode "groomDetached, $mode thread::send, all expired" -setup [list test_env pool-1.5-$mode $mode] {*}{
-	-body {
-	    set res	{}
-	    get_connection db1
-	    get_connection db2
-	    get_connection db3
-	    session_key db1 a
-	    session_key db2 b
-	    session_key db3 c
-	    lappend res [session_key db1]
-	    lappend res [session_key db2]
-	    lappend res [session_key db3]
-	    db1 release
-	    db2 release
-	    db3 release
-	    after 200
-	    set before	[tsv::get tdbcPools $pool]
-	    lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
-	    tdbc::_threadsend [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# all handles should be expired
-	    after 50				;# Wait for groomDetached to finish
-	    set after	[tsv::get tdbcPools $pool]
-	    lappend res [llength $after]	;# Expecting 1: only a new, primed handle should remain
-	    get_connection db1
-	    lappend res [session_key db1]
-	    db1 release
-	    set res
-	}
-	-cleanup {cleanup res before after}
-	-result {a b c 4 1 {}}
+test pool-1.4 {groomDetached, one expired} -setup {test_env pool-1.4} {*}{
+    -body {
+	set res	{}
+	get_connection db1
+	get_connection db2
+	get_connection db3
+	session_key db1 a
+	session_key db2 b
+	session_key db3 c
+	lappend res [session_key db1]
+	lappend res [session_key db2]
+	lappend res [session_key db3]
+	db2 close
+	after 200
+	db1 close
+	db3 close
+	set before	[tsv::get tdbcPools $pool]
+	lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
+	$::threadPlugin send [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# "b" handle should be expired
+	after 50				;# Wait for groomDetached to finish
+	set after	[tsv::get tdbcPools $pool]
+	lappend res [llength $after]	;# Expecting 2: db2 plus the primed handles should have expired
+	set now		[clock microseconds]
+	lappend res [expr {
+	    [lrange [describe_pool $before] 0 end-2]  eq  [describe_pool $after]
+		? "trimmed"
+		: "\nunexpected:\n\tbefore: ([describe_pool $before $now]),\n\tafter:  ([describe_pool $after $now])\n"
+	}]
+	get_connection db3
+	get_connection db1
+	get_connection db2
+	lappend res [session_key db1]	;# Should be the original db1 connection
+	lappend res [session_key db2]	;# Should be a new connection
+	lappend res [session_key db3]	;# Should be the original db3 connection
+	db1 close
+	db2 close
+	db3 close
+	set res
     }
+    -cleanup {cleanup res before after pool now}
+    -result {a b c 4 2 trimmed a {} c}
+}
+
+test pool-1.5 {groomDetached, all expired} -setup {test_env pool-1.5} {*}{
+    -body {
+	set res	{}
+	get_connection db1
+	get_connection db2
+	get_connection db3
+	session_key db1 a
+	session_key db2 b
+	session_key db3 c
+	lappend res [session_key db1]
+	lappend res [session_key db2]
+	lappend res [session_key db3]
+	db1 close
+	db2 close
+	db3 close
+	after 200
+	set before	[tsv::get tdbcPools $pool]
+	lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
+	$::threadPlugin send [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# all handles should be expired
+	after 50				;# Wait for groomDetached to finish
+	set after	[tsv::get tdbcPools $pool]
+	lappend res [llength $after]	;# Expecting 1: only a new, primed handle should remain
+	get_connection db1
+	lappend res [session_key db1]
+	db1 close
+	set res
+    }
+    -cleanup {cleanup res before after}
+    -result {a b c 4 1 {}}
 }
 
 test pool-2.1 {Force transaction rollback on release} {*}{
-    -setup {test_env pool-2.1 native}
+    -setup {test_env pool-2.1}
     -body {
 	set res	{}
 	get_connection db1
@@ -347,10 +345,10 @@ test pool-2.1 {Force transaction rollback on release} {*}{
 	db1 begintransaction
 	session_key db1 b
 	lappend res [session_key db1]
-	db1 release
+	db1 close
 	get_connection db1
 	lappend res [session_key db1]
-	db1 release
+	db1 close
 	set res
     }
     -cleanup {cleanup res}
@@ -358,7 +356,7 @@ test pool-2.1 {Force transaction rollback on release} {*}{
 }
 
 test pool-3.1 {Force statement destruction on release} {*}{
-    -setup {test_env pool-2.1 native}
+    -setup {test_env pool-2.1}
     -body {
 	set res	{}
 	get_connection db1
@@ -369,7 +367,7 @@ test pool-3.1 {Force statement destruction on release} {*}{
 	lappend res	[info object isa object $statement]
 	set statements	[db1 statements]
 	lappend res	[lmap e $statements {info object isa object $e}]
-	db1 release
+	db1 close
 	lappend res	[info object isa object $statement]
 	lappend res	[lmap e $statements {info object isa object $e}]
 	set res
@@ -379,7 +377,7 @@ test pool-3.1 {Force statement destruction on release} {*}{
 }
 
 test pool-4.1 {Force result set destruction on release} {*}{
-    -setup {test_env pool-2.1 native}
+    -setup {test_env pool-2.1}
     -body {
 	set res	{}
 	get_connection db1
@@ -392,7 +390,7 @@ test pool-4.1 {Force result set destruction on release} {*}{
 	lappend res	[info object isa object $resultset]
 	set resultsets	[db1 resultsets]
 	lappend res	[lmap e $resultsets {info object isa object $e}]
-	db1 release
+	db1 close
 	lappend res	[info object isa object $resultset]
 	lappend res	[lmap e $resultsets {info object isa object $e}]
 	set res
@@ -402,18 +400,19 @@ test pool-4.1 {Force result set destruction on release} {*}{
 }
 
 test pool-10.1 {Timing: below 1 ms and less than 70 % of a new connection} {*}{
-    -setup {test_env pool-10.1 native}
+    -setup {test_env pool-10.1}
     -body {
 	set nopool_usec [lindex [time {
 	    tdbc::$::env(TDBC_TEST_DRIVER)::connection create db_$testname {*}$::env(TDBC_TEST_CONNECTION)
-	    db_$testname destroy
+	    db_$testname close
 	} 100] 0 0]
 
 	tdbc::pool $::env(TDBC_TEST_DRIVER) create db_$testname {*}$::env(TDBC_TEST_CONNECTION)
 	set usec	[lindex [time {
-	    db_$testname release
+	    db_$testname close
 	    tdbc::pool $::env(TDBC_TEST_DRIVER) create db_$testname {*}$::env(TDBC_TEST_CONNECTION)
 	} 1000] 0]
+	puts "pool: $usec, nopool: $nopool_usec"
 	list [expr {$usec < 1000 ? "ok" : "too slow: $usec"}] [expr {$usec < $nopool_usec * .7 ? "ok" : "too slow relative to nopool: $usec vs $nopool_usec"}]
     }
     -cleanup {
@@ -423,6 +422,51 @@ test pool-10.1 {Timing: below 1 ms and less than 70 % of a new connection} {*}{
 	cleanup usec nopool_usec
     }
     -result {ok ok}
+}
+
+test pool-10.2 {Timing: below 1 ms and less than 70 % of a new statement} {*}{
+    -setup {test_env pool-10.2}
+    -body {
+	set res	{}
+	get_connection db1
+	set sql	{select :testname::text}
+	set first [expr {
+	    -1*([clock microseconds] - [lappend res [db1 allrows -as lists $sql]; clock microseconds])
+	}]
+	#set first [lindex [time {
+	#    lappend res [db1 allrows -as lists -- $sql]
+	#}] 0]
+	lappend res	$first
+	rename db1 {}
+	get_connection db2
+	#set ::tcl_traceExec 3
+	#lappend res [db2 allrows -as lists -- $sql]
+	#lappend res [db2 allrows -as lists -- $sql]
+	set second [expr {
+	    -1*([clock microseconds] - [lappend res [db2 allrows -as lists $sql]; clock microseconds])
+	}]
+	lappend res	$second
+	#set second [lindex [time {
+	#    lappend res [db2 allrows -as lists -- $sql]
+	#}] 0]
+	set third [expr {
+	    -1*([clock microseconds] - [lappend res [db2 allrows -as lists $sql]; clock microseconds])
+	}]
+	#set third [lindex [time {
+	#    lappend res [db2 allrows -as lists -- $sql]
+	#}] 0]
+	set ::tcl_traceExec 0
+	lappend res	$third
+    }
+    -cleanup {
+	foreach obj {db1 db2} {
+	    if {[info exists $obj]} {
+		rename $obj {}
+	    }
+	}
+	cleanup first second third res sql
+    }
+    -result {xx pool-10.2 xx pool-10.2 xx pool-10.2}
 }
 
 

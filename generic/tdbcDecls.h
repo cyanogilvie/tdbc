@@ -17,7 +17,7 @@
 /* !BEGIN!: Do not edit below this line. */
 
 #define TDBC_STUBS_EPOCH 0
-#define TDBC_STUBS_REVISION 3
+#define TDBC_STUBS_REVISION 4
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +34,10 @@ TDBCAPI Tcl_Obj*	Tdbc_TokenizeSql (Tcl_Interp* interp,
 				const char* statement);
 /* 2 */
 TDBCAPI const char*	Tdbc_MapSqlState (const char* sqlstate);
+/* 3 */
+TDBCAPI int		Tdbc_ParseConvenienceArgs (Tcl_Interp* interp,
+				Tcl_Obj* args, Tcl_Obj** opts,
+				Tcl_Obj** tail);
 
 typedef struct TdbcStubs {
     int magic;
@@ -44,6 +48,7 @@ typedef struct TdbcStubs {
     int (*tdbc_Init_) (Tcl_Interp* interp); /* 0 */
     Tcl_Obj* (*tdbc_TokenizeSql) (Tcl_Interp* interp, const char* statement); /* 1 */
     const char* (*tdbc_MapSqlState) (const char* sqlstate); /* 2 */
+    int (*tdbc_ParseConvenienceArgs) (Tcl_Interp* interp, Tcl_Obj* args, Tcl_Obj** opts, Tcl_Obj** tail); /* 3 */
 } TdbcStubs;
 
 extern const TdbcStubs *tdbcStubsPtr;
@@ -64,6 +69,8 @@ extern const TdbcStubs *tdbcStubsPtr;
 	(tdbcStubsPtr->tdbc_TokenizeSql) /* 1 */
 #define Tdbc_MapSqlState \
 	(tdbcStubsPtr->tdbc_MapSqlState) /* 2 */
+#define Tdbc_ParseConvenienceArgs \
+	(tdbcStubsPtr->tdbc_ParseConvenienceArgs) /* 3 */
 
 #endif /* defined(USE_TDBC_STUBS) */
 

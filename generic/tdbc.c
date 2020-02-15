@@ -30,9 +30,10 @@ static const struct TdbcCommand {
     const char* name;		/* Name of the command */
     Tcl_ObjCmdProc* proc;	/* Command procedure */
 } commandTable[] = {
-    { "::tdbc::mapSqlState",	TdbcMapSqlStateObjCmd },
-    { "::tdbc::tokenize", 	TdbcTokenizeObjCmd },
-    { NULL, 		  	NULL               },
+    { "::tdbc::mapSqlState",		TdbcMapSqlStateObjCmd },
+    { "::tdbc::tokenize", 		TdbcTokenizeObjCmd },
+    { "::tdbc::ParseConvenienceArgs",	TdbcParseConvenienceArgsObjCmd },
+    { NULL, 		  		NULL               },
 };
 
 /* Table mapping SQLSTATE to error code */

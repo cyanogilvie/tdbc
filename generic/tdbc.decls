@@ -31,3 +31,6 @@ declare 1 current {
 declare 2 current {
     const char* Tdbc_MapSqlState(const char* sqlstate)
 }
+declare 3 current {
+    int Tdbc_ParseConvenienceArgs(Tcl_Interp* interp, Tcl_Obj* args, Tcl_Obj** opts, Tcl_Obj** tail)
+}

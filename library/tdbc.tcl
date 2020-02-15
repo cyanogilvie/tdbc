@@ -18,79 +18,101 @@ namespace eval ::tdbc {
     variable generalError [list TDBC GENERAL_ERROR HY000 {}]
 }
 
-#------------------------------------------------------------------------------
-#
-# tdbc::ParseConvenienceArgs --
-#
-#	Parse the convenience arguments to a TDBC 'execute', 
-#	'executewithdictionary', or 'foreach' call.
-#
-# Parameters:
-#	argv - Arguments to the call
-#	optsVar -- Name of a variable in caller's scope that will receive
-#		   a dictionary of the supplied options
-#
-# Results:
-#	Returns any args remaining after parsing the options.
-#
-# Side effects:
-#	Sets the 'opts' dictionary to the options.
-#
-#------------------------------------------------------------------------------
+namespace eval ::tdbc::thread {
+    namespace export *
+    namespace ensemble create -prefixes no
 
-proc tdbc::ParseConvenienceArgs {argv optsVar} {
-
-    variable generalError
-    upvar 1 $optsVar opts
-
-    set opts [dict create -as dicts]
-    set i 0
-    
-    # Munch keyword options off the front of the command arguments
-    
-    foreach {key value} $argv {
-	if {[string index $key 0] eq {-}} {
-	    switch -regexp -- $key {
-		-as? {
-		    if {$value ne {dicts} && $value ne {lists}} {
-			set errorcode $generalError
-			lappend errorcode badVarType $value
-			return -code error \
-			    -errorcode $errorcode \
-			    "bad variable type \"$value\":\
-                             must be lists or dicts"
-		    }
-		    dict set opts -as $value
-		}
-		-c(?:o(?:l(?:u(?:m(?:n(?:s(?:v(?:a(?:r(?:i(?:a(?:b(?:le?)?)?)?)?)?)?)?)?)?)?)?)?) {
-		    dict set opts -columnsvariable $value
-		}
-		-- {
-		    incr i
-		    break
-		}
-		default {
-		    set errorcode $generalError
-		    lappend errorcode badOption $key
-		    return -code error \
-			-errorcode $errorcode \
-			"bad option \"$key\":\
-                             must be -as or -columnsvariable"
-		}
-	    }
-	} else {
-	    break
-	}
-	incr i 2
+    proc create script {
+	package require Thread
+	thread::create -preserved "$script\nthread::wait"
     }
 
-    return [lrange $argv[set argv {}] $i end]
-    
+    proc send {thread script} {
+	package require Thread
+	thread::send -async $thread $script
+    }
+
+    proc release thread {
+	package require Thread
+	thread::release $thread
+    }
 }
-
+
+namespace eval ::tdbc::ns_thread {
+    namespace export *
+    namespace ensemble create -prefixes no
+
+    proc create script {
+	package require Thread
+
+	lassign [chan pipe] read write
+	chan configure $write -buffering full -encoding utf-8 -translation lf -eofchar {} -blocking 0
+	chan configure $read  -buffering none -encoding utf-8 -translation lf -eofchar {} -blocking 1
+	thread::detach $read
+	thread::detach $write
+
+	# Need to test again because the test suite triggers
+	# this path even when not on NaviServer.
+
+	if {[info commands ns_thread] eq ""} {
+	    set startThread	{thread::create -preserved}
+	} else {
+	    set startThread	{ns_thread begindetached}
+	}
+
+	{*}$startThread [string map [list %chan% [list $read] %script% $script] {
+	    %script%
+
+	    proc release {} {
+		set ::exit 0
+	    }
+
+	    proc readable chan {
+		set len	[gets $chan]
+		if {[eof $chan]} {
+		    # Lost our control channel
+		    set ::exit 1
+		    return
+		}
+
+		# Isolate the control channel from the effects of $script
+		after idle [read $chan $len]
+	    }
+
+	    set chan	%chan%
+	    thread::attach $chan
+	    chan event $chan readable [list readable $chan]
+
+	    vwait ::exit
+	}]
+
+	# For these threads, the handle is the write end of the chan pipe
+	set write
+    }
+
+    proc send {thread script} {
+	package require Thread
+	tsv::lock tdbcThreads {
+	    thread::attach $thread
+	    try {
+		puts -nonewline $thread [string length $script]\n$script
+		flush $thread
+	    } finally {
+		thread::detach $thread
+	    }
+	}
+    }
+
+    proc release thread {
+	package require Thread
+	send $thread release
+    }
+}
+
+
 #------------------------------------------------------------------------------
 #
-# tdbc::_poolInit --
+# tdbc::PoolInit --
 #
 #	Initialize the connection pool machinery
 #
@@ -103,7 +125,10 @@ proc tdbc::ParseConvenienceArgs {argv optsVar} {
 #
 #------------------------------------------------------------------------------
 
-proc ::tdbc::_poolInit {} {
+proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
+    variable _thread
+    set _thread $threadPlugin
+
     if {[catch {package require Thread}]} {
 	# If threads aren't available, fall back to unpooled connections.
 	# TODO: provide a single interp implementation using a namespace
@@ -162,12 +187,59 @@ proc ::tdbc::_poolInit {} {
 
 	    package require tdbc::$driver
 
+	    if {"detach" ni [info class methods ::tdbc::${driver}::connection -all]} {
+		# This driver doesn't support detach, fall back to providing a
+		# vanilla connection instance
+		return [uplevel 1 [list tdbc::${driver}::connection $constructor {*}$args]]
+	    }
+
+	    # Create a wrapper class for this driver's connection class 
+	    # that automagically retuns this connection to the pool when
+	    # the instance is destroyed (unless the forceclose method is
+	    # called instead)
+
+	    if {![info object isa object ::tdbc::${driver}::pooledconnection]} {
+		oo::class create ::tdbc::${driver}::pooledconnection {
+		    variable prevent_release _pool
+
+		    constructor {pool args} {
+			set _pool $pool
+			next {*}$args
+		    }
+
+		    destructor {
+			if {![info exists prevent_release] && [my connected]} {
+			    # Don't put disconnected handles into the pool
+
+			    # Ensure we aren't returning a connection to the pool that
+			    # is in an open transaction.
+			    # TODO: is there a reliable way to know if a transaction
+			    # is open?
+			    catch {my rollback}
+
+			    set handle	[my detach]
+
+			    if {$handle ne ""} {
+				tsv::lpush tdbcPools $_pool [list $handle [clock microseconds]]
+			    }
+			}
+			if {[self next] ne ""} next
+		    }
+
+		    method forceclose {} {
+			set prevent_release 1
+			my destroy
+		    }
+		}
+		oo::define ::tdbc::${driver}::pooledconnection superclass ::tdbc::${driver}::connection
+	    }
+
 	    while 1 {
 		lassign [tsv::lpop tdbcPools $pool] handle lastUsed
 		if {$handle eq ""} break	;# Ran out of detached handles
 
 		try {
-		    uplevel 1 [list tdbc::${driver}::connection {*}$constructor -attach $handle]
+		    uplevel 1 [list tdbc::${driver}::pooledconnection {*}$constructor $pool -attach $handle]
 		} on ok connobj {
 		    #if {![$connobj connected]} {
 		    #    $connobj destroy
@@ -182,46 +254,13 @@ proc ::tdbc::_poolInit {} {
 
 	    if {![info exists connobj]} {
 		# No detached handles in the pool, open a new one
-		set connobj	[uplevel 1 [list tdbc::${driver}::connection {*}$constructor {*}$args]]
-	    }
-	    try {
-		# Provide a release method that puts this connection
-		# back into the pool.  Calls the detach method, so
-		# the side effects include destroying this instance.
-		# TODO: fiddle with the destructor to do this automagically?
-
-		oo::objdefine $connobj method release {} [string map [list %pool% [list $pool]] {
-		    # Result sets and statements hold references to this
-		    # connection, and so need to go before we can detach.
-		    # TODO: somehow defer the detach until the last reference goes
-		    # away?
-
-		    foreach resultset [my resultsets] { $resultset destroy }
-		    foreach statement [my statements] { $statement destroy }
-
-		    # Ensure we aren't returning a connection to the pool that
-		    # is in an open transaction.
-		    # TODO: is there a reliable way to know if a transaction
-		    # is open?
-		    catch {my rollback}
-
-		    set handle	[my detach]
-
-		    if {$handle ne ""} {
-			tsv::lpush tdbcPools %pool% [list $handle [clock microseconds]]
-		    }
-		}]
-	    } on error {errmsg options} {
-		if {[info exists connobj] && [info object isa object $connobj]} {
-		    $connobj destroy
-		}
-		return -options $options $errmsg
+		set connobj	[uplevel 1 [list tdbc::${driver}::pooledconnection {*}$constructor $pool {*}$args]]
 	    }
 
 	    if {[tsv::llength tdbcPools $pool] == 0} {
 		# Connection pool is empty, kick off a connection attempt in
 		# the background to prime the pool for the next request
-		tdbc::_threadsend [tsv::get tdbcThreads poolWorker] [list prime $pool]
+		$::tdbc::_thread send [tsv::get tdbcThreads poolWorker] [list prime $pool]
 	    }
 
 	    set connobj
@@ -239,85 +278,9 @@ proc ::tdbc::_poolInit {} {
 	    }
 	}
 
-	# ::tdbc::_prevent_native_thread_send - allow the test suite to force the
-	# use of the polyfill version.
-
-	if {
-	    ![info exists ::tdbc::_prevent_native_thread_send] &&
-	    [info commands ns_thread] eq ""
-	} {
-	    #puts "Using thread::send native"
-	    proc ::tdbc::_makethread script          {thread::create -preserved "$script\nthread::wait"}
-	    proc ::tdbc::_threadsend {thread script} {thread::send -async $thread $script}
-	    proc ::tdbc::_threadrelease thread       {thread::release $thread}
-	} else {
-	    # Naviserver lacks thread::send capability, polyfill with chan pipe
-	    #puts "Using thread::send polyfill with chan pipe"
-
-	    proc ::tdbc::_makethread script {
-		lassign [chan pipe] read write
-		chan configure $write -buffering full -encoding utf-8 -translation lf -eofchar {} -blocking 0
-		chan configure $read  -buffering none -encoding utf-8 -translation lf -eofchar {} -blocking 1
-		thread::detach $read
-		thread::detach $write
-
-		# Need to test again because the test suite triggers
-		# this path even when not on NaviServer.
-
-		if {[info commands ns_thread] eq ""} {
-		    set startThread	{thread::create -preserved}
-		} else {
-		    set startThread	{ns_thread begindetached}
-		}
-
-		{*}$startThread [string map [list %chan% [list $read] %script% $script] {
-		    %script%
-
-		    proc release {} {
-			set ::exit 0
-		    }
-
-		    proc readable chan {
-			set len	[gets $chan]
-			if {[eof $chan]} {
-			    # Lost our control channel
-			    set ::exit 1
-			    return
-			}
-
-			# Isolate the control channel from the effects of $script
-			after idle [read $chan $len]
-		    }
-
-		    set chan	%chan%
-		    thread::attach $chan
-		    chan event $chan readable [list readable $chan]
-
-		    vwait ::exit
-		}]
-
-		# For these threads, the handle is the write end of the chan pipe
-		set write
-	    }
-
-	    proc ::tdbc::_threadsend {thread script} {
-		tsv::lock tdbcThreads {
-		    thread::attach $thread
-		    try {
-			puts -nonewline $thread [string length $script]\n$script
-			flush $thread
-		    } finally {
-			thread::detach $thread
-		    }
-		}
-	    }
-
-	    proc ::tdbc::_threadrelease thread {::tdbc::_threadsend $thread release}
-	}
-
 	tsv::lock tdbcThreads {
 	    if {![tsv::exists tdbcThreads poolWorker]} {
-		tsv::set tdbcThreads poolWorker [tdbc::_makethread {
+		tsv::set tdbcThreads poolWorker [$threadPlugin create {
 		    # Every 20 seconds, run through the detached handles and remove
 		    # those that aren't connected, or have been idle longer than
 		    # two minutes.
@@ -393,7 +356,23 @@ proc ::tdbc::_poolInit {} {
     }
 }
 
-tdbc::_poolInit
+proc ::tdbc::pool {driver constructor args} {
+    # Defer the pool setup until it's actually needed, so that applications
+    # that don't use pools don't have a useless thread started.
+    # PoolInit replaces this proc with the real version.
+
+    tdbc::PoolInit
+    set tclver	[info tclversion]
+    if {[package vsatisfies $tclver 8.6 9.0]} {
+	tailcall ::tdbc::pool $driver $constructor {*}$args
+    }
+    uplevel 1 [list ::tdbc::pool $driver $constructor {*}$args]
+}
+
+# This will be replaced with a real implementation when ::tdbc::pool is
+# called for the first time
+
+proc ::tdbc::poolDestroy {driver args} {}
 
 #------------------------------------------------------------------------------
 #
@@ -789,18 +768,15 @@ oo::class create ::tdbc::connection {
 	tailcall $stmt allrows $argdict
     }
 
-    # The default detach method for derived classes that don't support
-    # it is just destroy
-
-    method detach {} {
-	my destroy
-    }
-
     # The default connected method for derived classes that don't
-    # support it is blind optimism
+    # support it is just to attempt a select 1
 
     method connected {} {
-	return 1
+	try {
+	    my allrows -as lists {select 1}
+	} on error {} {
+	    return 0
+	}
     }
 
     # Derived classes are expected to implement the 'begintransaction',
@@ -808,6 +784,13 @@ oo::class create ::tdbc::connection {
 	
     # Derived classes are expected to implement 'tables' and 'columns' method.
 
+    # Derived classes may implement a 'detach' method, which should:
+    #  - destroy any associated statement and resultset instances
+    #  - detach the underlying database connection handle
+    #  - destroy the connection instance
+    #  - return a string handle that can be used in the future to reattach
+    #    to this underlying database connection handle, possibly in a different
+    #    thread, by supplying -attach $handle as the only constructor arguments
 }
 
 #------------------------------------------------------------------------------

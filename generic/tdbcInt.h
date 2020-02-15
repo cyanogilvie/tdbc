@@ -36,5 +36,8 @@
 
 MODULE_SCOPE int TdbcTokenizeObjCmd(ClientData clientData, Tcl_Interp* interp,
 				    int objc, Tcl_Obj *const objv[]);
+MODULE_SCOPE int TdbcParseConvenienceArgsObjCmd(ClientData clientdata,
+						Tcl_Interp* interp, int objc,
+						Tcl_Obj *const objv[]);
 
 #endif

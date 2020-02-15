@@ -103,7 +103,7 @@ AC_C_INLINE
 # and PKG_TCL_SOURCES.
 #-----------------------------------------------------------------------
 
-TEA_ADD_SOURCES([tdbc.c tdbcStubInit.c tdbcTokenize.c])
+TEA_ADD_SOURCES([tdbc.c tdbcStubInit.c tdbcTokenize.c tdbcParseConvenienceArgs.c names.c])
 TEA_ADD_HEADERS([generic/tdbc.h generic/tdbcInt.h generic/tdbcDecls.h])
 if test "${TCL_MAJOR_VERSION}" -eq 8 ; then
   if test "${TCL_MINOR_VERSION}" -eq 5 ; then

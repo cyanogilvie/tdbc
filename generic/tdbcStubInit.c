@@ -29,6 +29,7 @@ const TdbcStubs tdbcStubs = {
     Tdbc_Init_, /* 0 */
     Tdbc_TokenizeSql, /* 1 */
     Tdbc_MapSqlState, /* 2 */
+    Tdbc_ParseConvenienceArgs, /* 3 */
 };
 
 /* !END!: Do not edit above this line. */
