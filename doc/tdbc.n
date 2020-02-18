@@ -53,6 +53,7 @@ package require \fBtdbc 1.0\fR
 package require \fBtdbc::\fIdriver version\fR
 
 \fBtdbc::\fIdriver\fB::connection create \fIdb\fR ?\fI\-option value\fR...?
+\fBtdbc::pool \fIdriver\fB create \fIdb\fR ?\fI\-option value\fR...?
 .fi
 .BE
 .SH "DESCRIPTION"
@@ -69,11 +70,15 @@ represent SQL statements, and \fBresult sets,\fR which represent
 the sets of rows that result from executing statements. All of these
 have manual pages of their own, listed under \fBSEE ALSO\fR.
 .PP
+The \fBtdbc::pool\fR command is a wrapper around the driver connection
+constructors providing a connection pooling facility.  See the
+tdbc::pool documentation for detais.
+.PP
 In addition, TDBC itself has a few service procedures that are chiefly
 of interest to driver writers. \fBSEE ALSO\fR also enumerates them.
 .SH "SEE ALSO"
 Tdbc_Init(3),
-tdbc::connection(n), tdbc::mapSqlState(n), 
+tdbc::connection(n), tdbc::pool(n), tdbc::mapSqlState(n), 
 tdbc::resultset(n), tdbc::statement(n), tdbc::tokenize(n),
 tdbc::mysql(n), tdbc::odbc(n), tdbc::postgres(n), tdbc::sqlite3(n)
 .SH "KEYWORDS"

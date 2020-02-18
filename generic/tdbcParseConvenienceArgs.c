@@ -49,7 +49,7 @@
 
 struct ParseLit {
     Tcl_Obj*	as;
-    Tcl_Obj*	columnsvariable;
+    Tcl_Obj*	columnsvar;
     Tcl_Obj*	dicts;
     Tcl_Obj*	empty;
 };
@@ -77,9 +77,9 @@ DeleteParseLit(
 	    Tcl_DecrRefCount(lit->as);
 	    lit->as = NULL;
 	}
-	if (lit->columnsvariable) {
-	    Tcl_DecrRefCount(lit->columnsvariable);
-	    lit->columnsvariable = NULL;
+	if (lit->columnsvar) {
+	    Tcl_DecrRefCount(lit->columnsvar);
+	    lit->columnsvar = NULL;
 	}
 	if (lit->dicts) {
 	    Tcl_DecrRefCount(lit->dicts);
@@ -134,7 +134,7 @@ Tdbc_ParseConvenienceArgs(
     const char* options[] = {"-as", "-columnsvariable", "--", NULL};
     enum {OPT_AS, OPT_COLUMNSVARIABLE, OPT_END};
     int option_index;
-    const char* formats[] = {"dicts", "lists", NULL};
+    const char* formats[] = {"lists", "dicts", NULL};
     enum {FMT_DICTS, FMT_LISTS};
     int fmt_index;
     int saw_as = 0;
@@ -147,12 +147,12 @@ Tdbc_ParseConvenienceArgs(
 	lit = ckalloc(sizeof(struct ParseLit));
 
 	lit->as = Tcl_NewStringObj("-as", 3);
-	lit->columnsvariable = Tcl_NewStringObj("-columnsvariable", 16);
+	lit->columnsvar = Tcl_NewStringObj("-columnsvariable", 16);
 	lit->dicts = Tcl_NewStringObj("dicts", 5);
 	lit->empty = Tcl_NewStringObj("", 0);
 
 	Tcl_IncrRefCount(lit->as);
-	Tcl_IncrRefCount(lit->columnsvariable);
+	Tcl_IncrRefCount(lit->columnsvar);
 	Tcl_IncrRefCount(lit->dicts);
 	Tcl_IncrRefCount(lit->empty);
 
@@ -190,7 +190,7 @@ Tdbc_ParseConvenienceArgs(
 	    i++;
 
 	    /* Ensure that the value for -as is a valid format */
-	    res = Tcl_GetIndexFromObj(interp, argv[i], formats, "format",
+	    res = Tcl_GetIndexFromObj(interp, argv[i], formats, "variable type",
 		    0, &fmt_index);
 	    if (res != TCL_OK) {
 		goto finally;
@@ -214,7 +214,7 @@ Tdbc_ParseConvenienceArgs(
 
 	    i++;
 
-	    res = Tcl_DictObjPut(interp, newopts, lit->as, argv[i]);
+	    res = Tcl_DictObjPut(interp, newopts, lit->columnsvar, argv[i]);
 	    if (res != TCL_OK) {
 		goto finally;
 	    }
@@ -304,7 +304,6 @@ TdbcParseConvenienceArgsObjCmd(
     Tcl_Obj* opts = NULL;
     Tcl_Obj* tail = NULL;
 
-TIME("XXX ParseConvenienceArgs",
     /* Check param count */
 
     if (objc != 3) {
@@ -335,6 +334,5 @@ TIME("XXX ParseConvenienceArgs",
 	Tcl_DecrRefCount(tail);
 	tail = NULL;
     }
-);
     return res;
 }

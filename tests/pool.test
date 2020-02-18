@@ -322,17 +322,20 @@ test pool-1.5 {groomDetached, all expired} -setup {test_env pool-1.5} {*}{
 	after 200
 	set before	[tsv::get tdbcPools $pool]
 	lappend res [llength $before]	;# Expecting 4: the 3 we released plus a primed one
-	$::threadPlugin send [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}	;# all handles should be expired
+
+	set now	[clock microseconds]
+	$::threadPlugin send [tsv::get tdbcThreads poolWorker] {groomDetached 0.1}
 	after 50				;# Wait for groomDetached to finish
+	# all but the latest handle should be expired
 	set after	[tsv::get tdbcPools $pool]
-	lappend res [llength $after]	;# Expecting 1: only a new, primed handle should remain
+	lappend res [llength $after]	;# Expecting 1: the last handle released to the pool (db3)
 	get_connection db1
 	lappend res [session_key db1]
 	db1 close
 	set res
     }
     -cleanup {cleanup res before after}
-    -result {a b c 4 1 {}}
+    -result {a b c 4 1 c}
 }
 
 test pool-2.1 {Force transaction rollback on release} {*}{
@@ -429,7 +432,11 @@ test pool-10.2 {Timing: below 1 ms and less than 70 % of a new statement} {*}{
     -body {
 	set res	{}
 	get_connection db1
-	set sql	{select :testname::text}
+	if {$::env(TDBC_TEST_DRIVER) eq "postgres"} {
+	    set sql	{select :testname::text}
+	} else {
+	    set sql	{select :testname}
+	}
 	set first [expr {
 	    -1*([clock microseconds] - [lappend res [db1 allrows -as lists $sql]; clock microseconds])
 	}]
@@ -466,7 +473,7 @@ test pool-10.2 {Timing: below 1 ms and less than 70 % of a new statement} {*}{
 	}
 	cleanup first second third res sql
     }
-    -result {xx pool-10.2 xx pool-10.2 xx pool-10.2}
+    -result {pool-10.2 xx pool-10.2 xx pool-10.2 xx}
 }
 
 

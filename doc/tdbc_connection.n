@@ -53,9 +53,12 @@ package require \fBtdbc 1.0\fR
 package require \fBtdbc::\fIdriver version\fR
 
 \fBtdbc::\fIdriver\fB::connection create \fIdb\fR ?\fI\-option value\fR...?
+\fBtdbc::\fIdriver\fB::connection create \fIdb\fR \fI\-attach handle\fR
 
 \fIdb \fBconfigure\fR ?\fI\-option value\fR...?
 \fIdb \fBclose\fR
+\fIdb \fBdetach\fR
+\fIdb \fBconnected\fR
 \fIdb \fBforeignkeys\fR ?\fI\-primary tableName\fR? ?\fI\-foreign tableName\fR?
 \fIdb \fBprepare\fR \fIsql-code\fR
 \fIdb \fBpreparecall\fR \fIcall\fR
@@ -88,6 +91,15 @@ This command accepts the name of a Tcl command that will represent the
 connection and a possible set of options (see \fBCONFIGURATION
 OPTIONS\fR). It establishes a connection to the database and returns
 the name of the newly-created Tcl command.
+
+As an alternative to the \fBCONFIGURATION OPTIONS\fR, the constructor
+can be passed a single option: \fB-attach \fI$handle\fR, which will
+attach this new instance to a previously detached database connection,
+identified by \fI$handle\fR.  \fB-attach\fR is not a configuration option and
+can't be changed or queried after the the instance is created.
+After using a particular \fI$handle\fR to attach to a connection, the
+\fI$handle\fR is consumed and no longer exists. See the description of the
+\fBdetach\fR method for details.
 .PP
 The \fBconfigure\fR object command on a database connection, if
 presented with no arguments, returns a list of alternating keywords
@@ -102,6 +114,85 @@ The \fBclose\fR object command on a database connection closes the
 connection. All active statements and result sets on the connection
 are closed. Any uncommitted transaction is rolled back. The object
 command is deleted.
+.PP
+The \fBdetach\fR object command on a database connection is optional for
+drivers to support.  It uncouples the underlying database connection state from
+this connection object, destoys the connection object and any associated
+statement and resultset objects, and returns a handle that can be passed to a
+constructor with \fB-attach\fR in order to reattach a connection object to this
+underlying database connection (possibly in a different thread).  This
+mechanism is primarily intended to support connection pooling (see the
+documentation for tdbc::pool for that), but can be used to move connection
+handles between threads for any reason.  For example this code creates a db
+connection in the main thread, creates a temporary table (which is only visible
+to this connection), and hands the open database connection off to a worker
+thread to perform some expensive computation and fill out the temporary table.
+The worker thread then hands the database connection back to the main thread
+which retrieves the results from the temporary table:
+
+.CS
+ package require tdbc::$driver
+ package require Thread
+ 
+ tdbc::${driver}::connection create db -db example
+ 
+ db allrows {
+    CREATE TEMPORARY TABLE foo (
+        answer    varchar(255)
+    )
+ }
+ 
+ set tid	[thread create -preserved {
+     proc expensiveThing {from driver handle} {
+         package require tdbc::$driver
+         tdbc::${driver}::connection create db \fB-attach $handle\fR
+ 
+         after 120000
+         set answer "forty two"
+
+         db allrows {
+             INSERT INTO foo (answer) VALUES (:answer)
+         }
+ 
+         thread send -async $from [list gotResults [\fBdb detach\fR]]
+         thread release [thread::id]
+     }
+     thread::wait
+ }]
+ 
+ proc gotResults {handle} {
+     tdbc::${driver}::connection create db \fB-attach $handle\fR
+
+     db foreach row {SELECT answer FROM foo} {
+         # Process values from temporary table, inserted by thread
+     }
+ }
+ 
+ thread::send -async $tid \\
+     [list expensiveThing [thread::id] [\fBdb detach\fR]]
+ 
+ # Do other things in the main thread while waiting
+ # for gotResults to be called...
+ 
+ thread::wait
+.CE
+
+The underlying database connection state is not affected by detaching
+and reattaching: the transaction context and all connection parameters,
+temporary tables, and session variables are perserved across detach /
+attach.
+
+To test for \fBdetach\fR support in a driver, an application should
+test if the \fBdetach\fR method is defined on the connection object:
+
+.CE
+ set detachSupported [expr {"detach" in [info object methods db -all]}]
+.CS
+
+Some drivers support efficient transport of prepared statements along
+with the detached connection, so that recreating them after attaching
+is almost instant (currently the postgres and mysql drivers), but this
+optimization is otherwise invisible to the Tcl code.
 .PP
 The \fBprepare\fR object command on a database connection prepares a SQL
 statement for execution. The \fIsql-code\fR argument must contain a
@@ -365,7 +456,8 @@ is \fBreadcommitted\fR.
 A script should not the isolation level when a transaction is in
 progress.
 .SH "SEE ALSO"
-encoding(n), tdbc(n), tdbc::resultset(n), tdbc::statement(n), tdbc::tokenize(n)
+encoding(n), tdbc(n), tdbc::resultset(n), tdbc::statement(n), tdbc::tokenize(n),
+tdbc::pool(n)
 .SH "KEYWORDS"
 TDBC, SQL, database, connectivity, connection, resultset, statement
 .SH "COPYRIGHT"

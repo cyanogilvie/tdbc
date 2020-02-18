@@ -137,13 +137,10 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 
 	proc ::tdbc::pool {driver constructor args} {
 	    try {
-		uplevel 1 [list tdbc::${driver}::connection $constructor {*}$args]
+		uplevel 1 \
+		    [list tdbc::${driver}::connection $constructor {*}$args]
 	    } on ok connobj {
-		oo::objdefine $connobj method release {} {
-		    foreach resultset [my resultsets] { $resultset destroy }
-		    foreach statement [my statements] { $statement destroy }
-		    my destroy
-		}
+		oo::objdefine $connobj method forceclose {} {my destroy}
 		set connobj
 	    }
 	}
@@ -164,6 +161,7 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 	# they time out)
 
 	proc ::tdbc::pool {driver constructor args} {
+	    variable _thread
 	    switch -- $constructor {
 		new {}
 
@@ -183,6 +181,13 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		if {![tsv::exists tdbcPools $pool]} {
 		    tsv::set tdbcPools $pool {}
 		}
+	    }
+
+	    if {![tsv::exists tdbcThreads poolWorker]} {
+		# Since we were last called the application destroyed
+		# all the pools, shutting down the background thread.
+		# Start it back up
+		tdbc::PoolInit $_thread
 	    }
 
 	    package require tdbc::$driver
@@ -218,9 +223,34 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 			    catch {my rollback}
 
 			    set handle	[my detach]
-
 			    if {$handle ne ""} {
-				tsv::lpush tdbcPools $_pool [list $handle [clock microseconds]]
+				# Segfault if we access _pool inside
+				# tsv::lock tdbcPools - by then our namespace
+				# has gone away.  TclOO bug?  More likely
+				# a driver destructor bug.
+				set pool	$_pool
+				set driver	[lindex $pool 0]
+				tsv::lock tdbcPools {
+				    # If tdbcPools $pool doesn't exist, it
+				    # means that the application removed it
+				    # with tdbc::destroyPool, so don't create
+				    # it again by putting this handle back.
+				    if {[tsv::exists tdbcPools $pool]} {
+					tsv::lpush tdbcPools $pool \
+					    [list $handle [clock microseconds]]
+					unset handle
+				    }
+				}
+				if {[info exists handle]} {
+				    # If the handle var still exists, we didn't
+				    # return it to the pool, so clean it up
+				    tsv::lappend tdbcZombies $driver $handle
+				    if {[tsv::exists tdbcThreads poolWorker]} {
+					$::tdbc::_thread send \
+					    [tsv::get tdbcThreads poolWorker] \
+					    groomDetached
+				    }
+				}
 			    }
 			}
 			if {[self next] ne ""} next
@@ -241,10 +271,6 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		try {
 		    uplevel 1 [list tdbc::${driver}::pooledconnection {*}$constructor $pool -attach $handle]
 		} on ok connobj {
-		    #if {![$connobj connected]} {
-		    #    $connobj destroy
-		    #    continue
-		    #}
 		    break
 		} on error {errmsg options} {
 		    #puts "[thread::id] Error attaching to detached handle $handle [dict get $options -errorcode]: [dict get $options -errorinfo]"
@@ -268,6 +294,7 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 
 	proc ::tdbc::poolDestroy {driver args} {
 	    set pool	[list $driver {*}$args]
+
 	    foreach detachedhandle [tsv::pop tdbcPools $pool] {
 		lassign $detachedhandle handle lastUsed
 		try {
@@ -276,6 +303,15 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		    $obj destroy
 		} on error {errmsg options} {}
 	    }
+
+	    tsv::lock tdbcThreads {
+		if {[tsv::array size tdbcPools] == 0} {
+		    # No more pools to mind, release the background thread
+		    if {[tsv::exists tdbcThreads poolWorker]} {
+			$::tdbc::_thread release [tsv::pop tdbcThreads poolWorker]
+		    }
+		}
+	    }
 	}
 
 	tsv::lock tdbcThreads {
@@ -283,7 +319,8 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		tsv::set tdbcThreads poolWorker [$threadPlugin create {
 		    # Every 20 seconds, run through the detached handles and remove
 		    # those that aren't connected, or have been idle longer than
-		    # two minutes.
+		    # two minutes, unless it is the last handle in the pool, in
+		    # which case the timeout does not apply
 
 		    proc groomDetached {{timeout 120}} {
 			global groom_afterid
@@ -305,13 +342,18 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 				    try {
 					tdbc::${driver}::connection new -attach $handle
 				    } on ok obj {
-					if {($now - $lastUsed) / 1e6 > $timeout || ![$obj connected]} {
+					if {
+					    (
+						[tsv::llength tdbcPools $pool] >= 1 &&
+						($now - $lastUsed) / 1e6 > $timeout
+					    ) ||
+					    ![$obj connected]
+					} {
 					    $obj destroy
-					    continue
+					} else {
+					    # Still valid - put it back
+					    tsv::lappend tdbcPools $pool [list [$obj detach] $lastUsed]
 					}
-
-					# Still valid - put it back
-					tsv::lappend tdbcPools $pool [list [$obj detach] $lastUsed]
 				    } on error {errmsg options} {
 					# TODO: what to do here?  We will leak $handle
 					# if we silently ignore this, but the
@@ -322,27 +364,53 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 				if {[tsv::llength tdbcPools $pool] == 0} {
 				    prime $pool
 				}
+				tsv::lock tdbcZombies {
+				    foreach driver [tsv::array names tdbcZombies] {
+					foreach handle [tsv::pop tdbcZombies $driver] {
+					    puts "Dealing with $driver zombie $handle"
+					    try {
+						tdbc::${driver}::connection new -attach $handle
+					    } on ok db {
+						$db destroy
+					    } on error {errmsg options} {
+						# This zombie unkillable.
+						# Pretend it doesn't exist.
+					    }
+					}
+				    }
+				}
 			    }
 			} finally {
 			    set groom_afterid	[after 20000 groomDetached]
 			}
 		    }
 
-		    # Ensure there is at least one detached handle in $pool.
+		    # Attempt to keep at least one detached handle in $pool.
 
 		    proc prime pool {
 			global prime_busy
 			if {[info exists prime_busy]} return
 			set prime_busy	1
 			try {
-			    if {[tsv::llength tdbcPools $pool] > 0} return
+			    if {[tsv::llength tdbcPools $pool] >= 1} return
 
 			    set args	[lassign $pool driver]
 			    package require tdbc::$driver
 			    set connobj	[tdbc::${driver}::connection new {*}$args]
 			    set handle	[$connobj detach]
 			    if {$handle ne ""} {
-				tsv::lappend tdbcPools $pool [list $handle [clock microseconds]]
+				tsv::lock tdbcPools {
+				    if {[tsv::exists tdbcPools $pool]} {
+					tsv::lappend tdbcPools $pool \
+					    [list $handle [clock microseconds]]
+				    } else {
+					# Most likely the pool was destroyed by
+					# tdbc::poolDestroy.  Avoid implicitly
+					# recreating it here.
+					set db [tdbc::${driver}::connection new -attach $handle]
+					$db destroy
+				    }
+				}
 			    }
 			} finally {
 			    unset -nocomplain prime_busy
