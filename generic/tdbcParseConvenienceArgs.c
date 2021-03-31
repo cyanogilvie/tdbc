@@ -174,9 +174,19 @@ Tdbc_ParseConvenienceArgs(
 	    /* Not an option, signals the end of options */
 	    break;
 	}
+	if (s[0] == '-' && s[1] == '-' && s[2] != 0) {
+	    /*
+	     * Not an option - a SQL string that starts with a comment:
+	     * end of options
+	     */
+	    break;
+	}
 
 	res = Tcl_GetIndexFromObj(interp, argv[i], options, "option", 0,
 				  &option_index);
+	if (res != TCL_OK) {
+	    goto finally;
+	}
 
 	switch (option_index) {
 	case OPT_AS:

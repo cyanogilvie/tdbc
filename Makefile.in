@@ -351,6 +351,7 @@ dist: dist-clean
 		$(srcdir)/doc/tdbc_connection.n \
 		$(srcdir)/doc/tdbc_resultset.n \
 		$(srcdir)/doc/tdbc_statement.n \
+		$(srcdir)/doc/tdbc_pool.n \
 		$(srcdir)/doc/tdbc_mapSqlState.n \
 		$(srcdir)/doc/tdbc_tokenize.n \
 		$(srcdir)/doc/Tdbc_Init.3 \
@@ -361,7 +362,10 @@ dist: dist-clean
 		$(srcdir)/generic/tdbc.h $(srcdir)/generic/tdbcDecls.h \
 		$(srcdir)/generic/tdbcInt.h $(srcdir)/generic/tdbcStubInit.c \
 		$(srcdir)/generic/tdbcStubLib.c \
-		$(srcdir)/generic/tdbcTokenize.c $(DIST_DIR)/generic/
+		$(srcdir)/generic/tdbcTokenize.c \
+		$(srcdir)/generic/tdbcParseConvenienceArgs.c \
+		$(srcdir)/generic/names.c \
+		$(DIST_DIR)/generic/
 
 	$(INSTALL_DATA_DIR) $(DIST_DIR)/library
 	$(DIST_INSTALL_DATA) $(srcdir)/library/tdbc.tcl $(DIST_DIR)/library/

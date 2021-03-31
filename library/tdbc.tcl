@@ -175,6 +175,8 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		}
 	    }
 
+	    #package require Thread	;# TIDPOOL
+	    #set pool	[list $driver [thread::id] {*}$args]	;# TIDPOOL
 	    set pool	[list $driver {*}$args]
 
 	    tsv::lock tdbcPools {
@@ -213,9 +215,7 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		    }
 
 		    destructor {
-			if {![info exists prevent_release] && [my connected]} {
-			    # Don't put disconnected handles into the pool
-
+			if {![info exists prevent_release]} {
 			    # Ensure we aren't returning a connection to the pool that
 			    # is in an open transaction.
 			    # TODO: is there a reliable way to know if a transaction
@@ -227,7 +227,8 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 				# Segfault if we access _pool inside
 				# tsv::lock tdbcPools - by then our namespace
 				# has gone away.  TclOO bug?  More likely
-				# a driver destructor bug.
+				# a driver destructor bug.  Could be this bug:
+				# https://core.tcl-lang.org/tcl/tktview/37efead06408d9aedd46d0e7f3eeb5910470e65e
 				set pool	$_pool
 				set driver	[lindex $pool 0]
 				tsv::lock tdbcPools {
@@ -293,7 +294,11 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 	}
 
 	proc ::tdbc::poolDestroy {driver args} {
+	    #package require Thread	;# TIDPOOL
+	    #set pool	[list $driver [thread::id] {*}$args]	;# TIDPOOL
 	    set pool	[list $driver {*}$args]
+
+	    if {![tsv::exists tdbcPools $pool]} return
 
 	    foreach detachedhandle [tsv::pop tdbcPools $pool] {
 		lassign $detachedhandle handle lastUsed
@@ -308,7 +313,8 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 		if {[tsv::array size tdbcPools] == 0} {
 		    # No more pools to mind, release the background thread
 		    if {[tsv::exists tdbcThreads poolWorker]} {
-			$::tdbc::_thread release [tsv::pop tdbcThreads poolWorker]
+			    # TIDPOOL: don't release the background thread, there are multiple pools (one for each thread)
+			    $::tdbc::_thread release [tsv::pop tdbcThreads poolWorker]
 		    }
 		}
 	    }
@@ -394,7 +400,9 @@ proc ::tdbc::PoolInit {{threadPlugin ::tdbc::thread}} {
 			try {
 			    if {[tsv::llength tdbcPools $pool] >= 1} return
 
+			    #set args	[lassign $pool driver tid]	;# TIDPOOL
 			    set args	[lassign $pool driver]
+
 			    package require tdbc::$driver
 			    set connobj	[tdbc::${driver}::connection new {*}$args]
 			    set handle	[$connobj detach]

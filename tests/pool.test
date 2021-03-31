@@ -48,11 +48,12 @@ proc test_env name {
     package require Thread
 
     set testname	$name
+    #set pool		[list $::env(TDBC_TEST_DRIVER) [thread::id] {*}$::env(TDBC_TEST_CONNECTION)]	;# TIDPOOL
     set pool		[list $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)]
 
     if {[tsv::exists tdbcThreads poolWorker]} {
 	# Tear down the existing pool state so that we can control the conditions of this test
-	if {[tsv::exists tdbcPools $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)]} {
+	if {[tsv::exists tdbcPools $pool]} {
 	    tdbc::poolDestroy $::env(TDBC_TEST_DRIVER) {*}$::env(TDBC_TEST_CONNECTION)
 	}
     }

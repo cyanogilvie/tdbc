@@ -42,6 +42,16 @@ test tdbc-1.4 {tdbc::mapSqlState, known state} {*}{
     -result {UNKNOWN_SQLSTATE}
 }
 
+test tdbc-2.1 {tdbc::ParseConvenienceArgs, sql starts with --} {*}{
+    -body {
+	list [tdbc::ParseConvenienceArgs {-as lists {-- foo
+select 1}} opts] $opts
+    }
+    -cleanup {unset -nocomplain opts}
+    -result {{{-- foo
+select 1}} {-as lists}}
+}
+
 
 cleanupTests
 return

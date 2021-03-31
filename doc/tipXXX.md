@@ -18,7 +18,7 @@ necessary primitives to TDBC drivers to support this.
 There is often a significant latency cost when creating new database
 connections \(at least 5 - 20 milliseconds even under ideal conditions\),
 and so it is desirable to reuse existing idle connections for
-applications like web servers where the the individual users of a database
+applications like web servers where the individual users of a database
 handle are short lived \(often on the tens of milliseconds timescale
 themselves\).  A common approach to this is to provide a pool of open
 database connections from which handles are issued to workers and to
@@ -45,6 +45,10 @@ it has open.  A connection pool addresses this by keeping the number of
 idle connections to a minimum, and monitoring those connections' health
 \(with the side-effect of preventing those connections from being flagged
 as idle by the database server\).
+
+## Requirements
+
+From the use-cases mentioned above, we can distil 
 
 ## Specification
 

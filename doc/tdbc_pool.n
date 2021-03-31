@@ -242,7 +242,7 @@ connection pooling and optimized prepared statement caching.
      }
 
      method getEmail {} {
-         lindex [\fBdb\fR allrows {
+         lindex [\fBdb\fR allrows -as lists {
              select
                  email
              from
